@@ -178,13 +178,34 @@ async function connect() {
       );
     });
 
-    // 3. Create client and stream
+    // 3. Request mic permission explicitly so the browser prompt appears clearly
+    addTranscript("system", "🎤 Requesting microphone access…");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false,
+      });
+      stream.getTracks().forEach((t) => t.stop()); // release — Anam SDK opens its own
+    } catch (permErr) {
+      addTranscript(
+        "system",
+        "❌ Microphone permission denied. Allow mic access in your browser settings and try again.",
+      );
+      setConnectionStatus("disconnected");
+      connectBtn.disabled = false;
+      return;
+    }
+
+    // 4. Create Anam client and start streaming
     state.anamClient = window.anamCreateClient(tokenData.session_token);
 
     state.anamClient.addListener("CONNECTION_CLOSED", () => {
       setConnectionStatus("disconnected");
       setControlsEnabled(false);
       connectBtn.disabled = false;
+      micBtn.textContent = "🎤 Microphone";
+      micBtn.classList.remove("active");
+      micStatus.textContent = "Microphone: off";
       addTranscript("system", "Connection closed.");
     });
 
@@ -196,7 +217,13 @@ async function connect() {
     state.isConnected = true;
     setConnectionStatus("connected");
     setControlsEnabled(true);
-    addTranscript("system", "✓ Connected! Cara is listening — start speaking.");
+
+    // Mic is ON by default the moment Anam starts streaming — sync UI to match reality
+    state.isMicOn = true;
+    micBtn.classList.add("active");
+    micBtn.textContent = "🔇 Mute Mic";
+    micStatus.textContent = "Microphone: active — Cara can hear you";
+    addTranscript("system", "✓ Connected! Cara can hear you — start speaking.");
   } catch (err) {
     console.error("Connection error:", err);
     setConnectionStatus("disconnected");
@@ -230,22 +257,26 @@ function disconnect() {
 
 // ── Microphone ────────────────────────────────────────────────────
 function toggleMicrophone() {
-  if (!state.isConnected) {
+  if (!state.isConnected || !state.anamClient) {
     addTranscript("system", "Connect to Cara first.");
     return;
   }
-  if (!state.isMicOn) {
-    state.anamClient?.unmuteInputAudio?.();
-    state.isMicOn = true;
-    micBtn.classList.add("active");
-    micStatus.textContent = "Microphone: active — Cara is listening";
-    addTranscript("system", "🎤 Microphone on.");
-  } else {
-    state.anamClient?.muteInputAudio?.();
+  if (state.isMicOn) {
+    // Currently on → mute it
+    state.anamClient.muteInputAudio();
     state.isMicOn = false;
     micBtn.classList.remove("active");
-    micStatus.textContent = "Microphone: off";
-    addTranscript("system", "🔇 Microphone off.");
+    micBtn.textContent = "🎤 Unmute Mic";
+    micStatus.textContent = "Microphone: muted";
+    addTranscript("system", "🔇 Microphone muted — Cara cannot hear you.");
+  } else {
+    // Currently muted → unmute
+    state.anamClient.unmuteInputAudio();
+    state.isMicOn = true;
+    micBtn.classList.add("active");
+    micBtn.textContent = "🔇 Mute Mic";
+    micStatus.textContent = "Microphone: active — Cara can hear you";
+    addTranscript("system", "🎤 Microphone unmuted — Cara can hear you.");
   }
 }
 
