@@ -346,57 +346,101 @@ function addSystemNote(text) {
 
 function addUserBubble(text, addToDOM = true) {
   if (!text || !text.trim()) return;
+  const t = text.trim();
   const time = timestamp();
-  state.conversationLog.push({
-    role: "user",
-    text: text.trim(),
-    time,
-    final: true,
-  });
+  state.conversationLog.push({ role: "user", text: t, time, final: true });
   if (!addToDOM) return;
   const wrap = document.createElement("div");
   wrap.className = "tx-row tx-user";
-  // Inline format: "Student: " then quoted text then timestamp
-  wrap.innerHTML =
-    `<span class="tx-label">Student:</span>` +
-    `<span class="tx-bubble">${escapeHtml(text.trim())}</span>` +
-    `<span class="tx-time">${time}</span>`;
+  // Label bold + coloured, then quoted speech inline, then faint timestamp
+  const label = document.createElement("span");
+  label.className = "tx-label";
+  label.textContent = "Student: ";
+  const bubble = document.createElement("span");
+  bubble.className = "tx-bubble";
+  bubble.textContent = "“" + t + "”";
+  const ts = document.createElement("span");
+  ts.className = "tx-time";
+  ts.textContent = time;
+  wrap.appendChild(label);
+  wrap.appendChild(bubble);
+  wrap.appendChild(document.createTextNode(" "));
+  wrap.appendChild(ts);
   transcriptEl.appendChild(wrap);
   scrollTranscript();
 }
 
-// APPEND incremental words to the live Cara paragraph
+// APPEND incremental word fragments to the live Cara paragraph
 function appendToCaraStream(fragment) {
   if (!fragment) return;
   if (!state.caraStreamBubble) {
-    // First fragment — create the row
+    // First word of a new Cara turn — build the paragraph row
     const time = timestamp();
     state.conversationLog.push({ role: "cara", text: "", time, final: false });
     const wrap = document.createElement("div");
     wrap.className = "tx-row tx-cara";
-    // Label is inline, bubble fills after it, time at end
-    wrap.innerHTML =
-      `<span class="tx-label">Cara (VA):</span>` +
-      `<span class="tx-bubble tx-streaming"></span>` +
-      `<span class="tx-time">${time}</span>`;
+    const label = document.createElement("span");
+    label.className = "tx-label";
+    label.textContent = "Cara (VA): ";
+    // Opening curly quote — stays permanently
+    const openQuote = document.createTextNode("“");
+    // Text node that grows as words arrive
+    const textNode = document.createTextNode("");
+    // Blinking cursor element — removed on finalise
+    const cursor = document.createElement("span");
+    cursor.className = "tx-cursor";
+    cursor.textContent = "▮";
+    // Closing quote placeholder — hidden until finalised
+    const closeQuote = document.createTextNode("");
+    const ts = document.createElement("span");
+    ts.className = "tx-time";
+    ts.textContent = time;
+    wrap.appendChild(label);
+    wrap.appendChild(openQuote);
+    wrap.appendChild(textNode);
+    wrap.appendChild(cursor);
+    wrap.appendChild(closeQuote);
+    wrap.appendChild(document.createTextNode(" "));
+    wrap.appendChild(ts);
     transcriptEl.appendChild(wrap);
-    state.caraStreamBubble = wrap.querySelector(".tx-bubble");
+    // Store refs so we can update them
+    state.caraStreamBubble = { wrap, textNode, cursor, closeQuote };
     state.caraStreamText = "";
   }
-  // APPEND fragment — do not replace
+  // APPEND — do not replace
   state.caraStreamText += fragment;
-  state.caraStreamBubble.textContent = state.caraStreamText;
+  state.caraStreamBubble.textNode.textContent = state.caraStreamText;
   scrollTranscript();
 }
 
-// Lock in Cara's bubble when her turn is done; optionally correct with final clean text
+// Finalise Cara's turn — remove cursor, close the quote, optionally correct text
 function finaliseCaraStream(finalText) {
   if (!state.caraStreamBubble) return;
+  const { textNode, cursor, closeQuote } = state.caraStreamBubble;
+  // Apply corrected final text if provided
   if (finalText && finalText.trim()) {
-    state.caraStreamBubble.textContent = finalText.trim();
+    textNode.textContent = finalText.trim();
     state.caraStreamText = finalText.trim();
+    // Update log
+    const entry =
+      state.conversationLog.findLast &&
+      state.conversationLog.findLast((e) => e.role === "cara" && !e.final);
+    if (entry) {
+      entry.text = finalText.trim();
+      entry.final = true;
+    }
+  } else if (state.caraStreamText) {
+    const entry =
+      state.conversationLog.findLast &&
+      state.conversationLog.findLast((e) => e.role === "cara" && !e.final);
+    if (entry) {
+      entry.text = state.caraStreamText;
+      entry.final = true;
+    }
   }
-  state.caraStreamBubble.classList.remove("tx-streaming");
+  // Remove blinking cursor, add closing quote
+  if (cursor.parentNode) cursor.parentNode.removeChild(cursor);
+  closeQuote.textContent = "”";
   state.caraStreamBubble = null;
   state.caraStreamText = "";
 }
