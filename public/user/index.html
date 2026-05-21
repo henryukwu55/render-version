@@ -9,6 +9,12 @@
       href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap"
       rel="stylesheet"
     />
+    <!-- Load Anam SDK and expose createClient globally before app script runs -->
+    <script type="module">
+      import { createClient } from "https://esm.sh/@anam-ai/js-sdk@4.12.0";
+      window.anamCreateClient = createClient;
+      window.dispatchEvent(new Event("anam-sdk-ready"));
+    </script>
     <style>
       :root {
         --bg: #0c0c10;

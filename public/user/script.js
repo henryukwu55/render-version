@@ -154,27 +154,32 @@ async function connect() {
     const tokenData = await tokenRes.json();
 
     if (tokenData.demo_mode || !tokenData.session_token) {
-      addTranscript(
-        "system",
-        "⚠️ ANAM_API_KEY not configured on server. Running in demo mode.",
-      );
+      addTranscript("system", "⚠️ ANAM_API_KEY not configured on server.");
       state.isConnected = true;
       setConnectionStatus("connected");
       setControlsEnabled(true);
       return;
     }
 
-    // 2. Dynamically import the Anam SDK from esm.sh (no build step needed)
-    const { createClient } =
-      await import("https://esm.sh/@anam-ai/js-sdk@latest");
-
-    // 3. Create client with the session token
-    state.anamClient = createClient(tokenData.session_token);
-
-    // 4. Listen for talk events to show transcript
-    state.anamClient.addListener("TALK_STREAM_STARTED", () => {
-      addTranscript("assistant", "Cara is speaking…");
+    // 2. Wait for the Anam SDK module to be ready (loaded via <script type="module"> in HTML)
+    await new Promise((resolve, reject) => {
+      if (window.anamCreateClient) return resolve();
+      const timeout = setTimeout(
+        () => reject(new Error("Anam SDK took too long to load")),
+        10000,
+      );
+      window.addEventListener(
+        "anam-sdk-ready",
+        () => {
+          clearTimeout(timeout);
+          resolve();
+        },
+        { once: true },
+      );
     });
+
+    // 3. Create client and stream
+    state.anamClient = window.anamCreateClient(tokenData.session_token);
 
     state.anamClient.addListener("CONNECTION_CLOSED", () => {
       setConnectionStatus("disconnected");
@@ -183,20 +188,15 @@ async function connect() {
       addTranscript("system", "Connection closed.");
     });
 
-    // 5. Start streaming to the video element
     await state.anamClient.streamToVideoElement("anam-video");
 
-    // Show video, hide placeholder
     anamVideo.style.display = "block";
     avatarPlaceholder.style.display = "none";
 
     state.isConnected = true;
     setConnectionStatus("connected");
     setControlsEnabled(true);
-    addTranscript(
-      "system",
-      "✓ Connected to Cara! Start speaking — she can hear you automatically.",
-    );
+    addTranscript("system", "✓ Connected! Cara is listening — start speaking.");
   } catch (err) {
     console.error("Connection error:", err);
     setConnectionStatus("disconnected");
