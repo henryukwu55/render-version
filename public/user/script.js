@@ -8,10 +8,10 @@ const state = {
   isConnected: false,
   isMicOn: false,
   accessCode: null,
-  localStream: null,
-  // Transcript tracking
-  caraStreamingDiv: null, // the live <div> being built word-by-word
-  caraStreamingContent: "", // accumulated text for current Cara turn
+  // Transcript
+  caraStreamBubble: null, // live <div class="tx-bubble"> being updated
+  caraStreamText: "", // accumulated text for current Cara turn
+  conversationLog: [], // [{role, text, time}] — source of truth for copy
 };
 
 // ── DOM ──────────────────────────────────────────────────────────
@@ -71,10 +71,9 @@ async function validateCode() {
     return;
   }
   let cleanCode = rawCode.toUpperCase();
-  if (!cleanCode.startsWith("AT-")) {
-    cleanCode = cleanCode.replace(/^AT-?/i, "");
-    cleanCode = "AT-" + cleanCode;
-  }
+  if (!cleanCode.startsWith("AT-"))
+    cleanCode = "AT-" + cleanCode.replace(/^AT-?/i, "");
+
   submitCodeBtn.disabled = true;
   submitCodeBtn.textContent = "Verifying…";
   try {
@@ -100,7 +99,6 @@ async function validateCode() {
       `Session started — ${formatDuration(state.durationSeconds)} available. Click "Connect to Cara" to begin.`,
     );
   } catch (err) {
-    console.error("Validation error:", err);
     codeError.textContent = "Network error. Please try again.";
     submitCodeBtn.disabled = false;
     submitCodeBtn.textContent = "Start Session";
@@ -122,15 +120,11 @@ function updateTimerDisplay() {
   const mins = Math.floor(remaining / 60);
   const secs = remaining % 60;
   timerDisplay.textContent = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-  if (remaining < 60) {
-    timerDisplay.classList.add("urgent");
-    if (remaining === 10) addSystemNote("⚠️ 10 seconds remaining");
-  } else {
-    timerDisplay.classList.remove("urgent");
-  }
+  timerDisplay.classList.toggle("urgent", remaining < 60);
+  if (remaining === 10) addSystemNote("⚠️ 10 seconds remaining");
 }
 
-// ── Connect to Anam ───────────────────────────────────────────────
+// ── Connect ───────────────────────────────────────────────────────
 async function connect() {
   if (!state.sessionToken) {
     addSystemNote("❌ No session token. Please restart.");
@@ -139,8 +133,8 @@ async function connect() {
   setConnectionStatus("connecting");
   connectBtn.disabled = true;
   addSystemNote("Connecting to Cara…");
+
   try {
-    // 1. Get Anam session token from backend
     const tokenRes = await fetch("/api/anam/token");
     const tokenData = await tokenRes.json();
     if (tokenData.demo_mode || !tokenData.session_token) {
@@ -151,65 +145,52 @@ async function connect() {
       return;
     }
 
-    // 2. Wait for SDK
+    // Wait for SDK (loaded via <script type="module"> in HTML)
     await new Promise((resolve, reject) => {
       if (window.anamCreateClient) return resolve();
-      const timeout = setTimeout(
-        () => reject(new Error("Anam SDK took too long to load")),
-        10000,
+      const t = setTimeout(
+        () => reject(new Error("Anam SDK timed out")),
+        15000,
       );
       window.addEventListener(
         "anam-sdk-ready",
         () => {
-          clearTimeout(timeout);
+          clearTimeout(t);
           resolve();
         },
         { once: true },
       );
     });
 
-    // 3. Request mic permission explicitly
-    addSystemNote("🎤 Requesting microphone access…");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: false,
-      });
-      stream.getTracks().forEach((t) => t.stop());
-    } catch (permErr) {
-      addSystemNote(
-        "❌ Microphone permission denied. Allow mic access in your browser settings and try again.",
-      );
-      setConnectionStatus("disconnected");
-      connectBtn.disabled = false;
-      return;
-    }
-
-    // 4. Create client
+    // Create client — do NOT call getUserMedia before this.
+    // The SDK handles mic permission internally; pre-grabbing the stream breaks it.
     state.anamClient = window.anamCreateClient(tokenData.session_token);
 
-    // ── Transcript events ────────────────────────────────────────
-    // Real-time word-by-word streaming for Cara's speech
-    state.anamClient.addListener("MESSAGE_STREAM_EVENT_RECEIVED", (event) => {
-      if (event.role === "persona") {
-        // Cara is speaking — stream words into a live bubble
-        updateCaraStream(event.content);
-      } else if (event.role === "user") {
-        // User finished speaking — show their full recognised utterance
-        finaliseCaraStream(); // close any open Cara bubble first
-        addUserBubble(event.content);
-      }
+    // ── Mic permission events ──────────────────────────────────
+    state.anamClient.addListener("MIC_PERMISSION_PENDING", () => {
+      addSystemNote("🎤 Requesting microphone permission…");
+    });
+    state.anamClient.addListener("MIC_PERMISSION_GRANTED", () => {
+      state.isMicOn = true;
+      micBtn.classList.add("active");
+      micBtn.textContent = "🔇 Mute Mic";
+      micStatus.textContent = "Microphone: active — Cara can hear you";
+      addSystemNote("✓ Microphone granted — Cara can hear you.");
+    });
+    state.anamClient.addListener("MIC_PERMISSION_DENIED", (err) => {
+      addSystemNote(
+        "❌ Microphone denied. Open browser settings and allow mic, then reconnect.",
+      );
+      micStatus.textContent = "Microphone: permission denied";
     });
 
-    // Full history after each turn completes — use to finalise/correct Cara's bubble
-    state.anamClient.addListener("MESSAGE_HISTORY_UPDATED", (messages) => {
-      // Find the last assistant message and finalise with its complete text
-      const lastAssistant = [...messages]
-        .reverse()
-        .find((m) => m.role === "assistant");
-      if (lastAssistant) finaliseCaraStream(lastAssistant.content);
+    // ── Connection events ──────────────────────────────────────
+    state.anamClient.addListener("CONNECTION_ESTABLISHED", () => {
+      addSystemNote("✓ Connected to Cara.");
     });
-
+    state.anamClient.addListener("SESSION_READY", () => {
+      addSystemNote("✓ Cara is ready — start speaking!");
+    });
     state.anamClient.addListener("CONNECTION_CLOSED", () => {
       finaliseCaraStream();
       setConnectionStatus("disconnected");
@@ -218,10 +199,72 @@ async function connect() {
       micBtn.textContent = "🎤 Microphone";
       micBtn.classList.remove("active");
       micStatus.textContent = "Microphone: off";
+      state.isConnected = false;
+      state.isMicOn = false;
       addSystemNote("Connection closed.");
     });
 
-    // 5. Start streaming
+    // ── User speech events ─────────────────────────────────────
+    state.anamClient.addListener("USER_SPEECH_STARTED", () => {
+      micStatus.textContent = "🎤 Listening…";
+    });
+    state.anamClient.addListener("USER_SPEECH_ENDED", () => {
+      micStatus.textContent = "Microphone: active — Cara can hear you";
+    });
+
+    // ── Transcript: streaming (word-by-word APPEND) ────────────
+    // MESSAGE_STREAM_EVENT_RECEIVED sends INCREMENTAL new words, not full text.
+    // role = "persona" while Cara speaks; role = "user" when user turn finalises.
+    state.anamClient.addListener("MESSAGE_STREAM_EVENT_RECEIVED", (event) => {
+      if (event.role === "persona") {
+        // Append new word fragment to the live Cara bubble
+        appendToCaraStream(event.content);
+      } else if (event.role === "user") {
+        // User's recognised speech — show as a user bubble
+        finaliseCaraStream();
+        addUserBubble(event.content, true);
+      }
+    });
+
+    // MESSAGE_HISTORY_UPDATED fires after each full turn.
+    // Use it to correct/finalise Cara's bubble with the clean final text.
+    state.anamClient.addListener("MESSAGE_HISTORY_UPDATED", (messages) => {
+      const lastAssistant = [...messages]
+        .reverse()
+        .find((m) => m.role === "assistant");
+      const lastUser = [...messages].reverse().find((m) => m.role === "user");
+
+      if (lastAssistant) {
+        finaliseCaraStream(lastAssistant.content);
+        // Update conversation log with clean final text
+        const existing = state.conversationLog.findLast?.(
+          (e) => e.role === "cara",
+        );
+        if (existing && !existing.final) {
+          existing.text = lastAssistant.content;
+          existing.final = true;
+        }
+      }
+      if (lastUser) {
+        // Make sure the user bubble is in the log (stream event may have already added it)
+        const lastLogUser = state.conversationLog.findLast?.(
+          (e) => e.role === "user",
+        );
+        if (!lastLogUser || lastLogUser.text !== lastUser.content) {
+          addUserBubble(lastUser.content, false); // false = don't duplicate DOM if already there
+        }
+        // Update log entry to final
+        const logEntry = state.conversationLog.findLast?.(
+          (e) => e.role === "user",
+        );
+        if (logEntry) {
+          logEntry.text = lastUser.content;
+          logEntry.final = true;
+        }
+      }
+    });
+
+    // ── Start streaming ────────────────────────────────────────
     await state.anamClient.streamToVideoElement("anam-video");
 
     anamVideo.style.display = "block";
@@ -229,11 +272,6 @@ async function connect() {
     state.isConnected = true;
     setConnectionStatus("connected");
     setControlsEnabled(true);
-    state.isMicOn = true;
-    micBtn.classList.add("active");
-    micBtn.textContent = "🔇 Mute Mic";
-    micStatus.textContent = "Microphone: active — Cara can hear you";
-    addSystemNote("✓ Connected! Cara can hear you — start speaking.");
   } catch (err) {
     console.error("Connection error:", err);
     setConnectionStatus("disconnected");
@@ -249,10 +287,6 @@ function disconnect() {
     state.anamClient.stopStreaming();
     state.anamClient = null;
   }
-  if (state.localStream) {
-    state.localStream.getTracks().forEach((t) => t.stop());
-    state.localStream = null;
-  }
   anamVideo.srcObject = null;
   anamVideo.style.display = "none";
   avatarPlaceholder.style.display = "flex";
@@ -262,11 +296,12 @@ function disconnect() {
   setControlsEnabled(false);
   connectBtn.disabled = false;
   micBtn.classList.remove("active");
+  micBtn.textContent = "🎤 Microphone";
   micStatus.textContent = "Microphone: off";
   addSystemNote("Disconnected.");
 }
 
-// ── Microphone ────────────────────────────────────────────────────
+// ── Microphone toggle ─────────────────────────────────────────────
 function toggleMicrophone() {
   if (!state.isConnected || !state.anamClient) {
     addSystemNote("Connect to Cara first.");
@@ -285,25 +320,22 @@ function toggleMicrophone() {
     micBtn.classList.add("active");
     micBtn.textContent = "🔇 Mute Mic";
     micStatus.textContent = "Microphone: active — Cara can hear you";
-    addSystemNote("🎤 Microphone unmuted — Cara can hear you.");
+    addSystemNote("🎤 Microphone active — Cara can hear you.");
   }
 }
 
-// ── Text Message ──────────────────────────────────────────────────
+// ── Text message ──────────────────────────────────────────────────
 function sendTextMessage() {
   const message = messageInput.value.trim();
   if (!message || !state.isConnected) return;
-  // Add user bubble immediately so they see their text
-  addUserBubble(message);
-  if (state.anamClient?.sendUserMessage) {
+  addUserBubble(message, true);
+  if (state.anamClient?.sendUserMessage)
     state.anamClient.sendUserMessage(message);
-  }
   messageInput.value = "";
 }
 
-// ── Transcript: building-block functions ─────────────────────────
+// ── Transcript helpers ────────────────────────────────────────────
 
-// System notes (connection info, warnings) — subtle, centred
 function addSystemNote(text) {
   const div = document.createElement("div");
   div.className = "tx-system";
@@ -312,46 +344,60 @@ function addSystemNote(text) {
   scrollTranscript();
 }
 
-// User bubble — right-aligned
-function addUserBubble(text) {
+function addUserBubble(text, addToDOM = true) {
   if (!text || !text.trim()) return;
+  const time = timestamp();
+  // Add to conversation log
+  state.conversationLog.push({
+    role: "user",
+    text: text.trim(),
+    time,
+    final: true,
+  });
+  if (!addToDOM) return; // called from history update when DOM already has it
   const wrap = document.createElement("div");
   wrap.className = "tx-row tx-user";
   wrap.innerHTML = `
     <div class="tx-label">You</div>
     <div class="tx-bubble">${escapeHtml(text)}</div>
-    <div class="tx-time">${timestamp()}</div>`;
+    <div class="tx-time">${time}</div>`;
   transcriptEl.appendChild(wrap);
   scrollTranscript();
 }
 
-// Called repeatedly as Cara speaks — streams words into one growing bubble
-function updateCaraStream(partialText) {
-  if (!partialText) return;
-  if (!state.caraStreamingDiv) {
-    // First word of a new Cara turn — create the bubble
+// APPEND incremental words to the live Cara bubble
+function appendToCaraStream(fragment) {
+  if (!fragment) return;
+  if (!state.caraStreamBubble) {
+    // First fragment of a new Cara turn — create the bubble
+    const time = timestamp();
+    state.conversationLog.push({ role: "cara", text: "", time, final: false });
     const wrap = document.createElement("div");
     wrap.className = "tx-row tx-cara";
     wrap.innerHTML = `
       <div class="tx-label">Cara</div>
       <div class="tx-bubble tx-streaming"></div>
-      <div class="tx-time">${timestamp()}</div>`;
+      <div class="tx-time">${time}</div>`;
     transcriptEl.appendChild(wrap);
-    state.caraStreamingDiv = wrap.querySelector(".tx-bubble");
-    state.caraStreamingContent = "";
+    state.caraStreamBubble = wrap.querySelector(".tx-bubble");
+    state.caraStreamText = "";
   }
-  state.caraStreamingContent = partialText; // SDK sends full partial each time
-  state.caraStreamingDiv.textContent = state.caraStreamingContent;
+  // APPEND the new fragment (not replace)
+  state.caraStreamText += fragment;
+  state.caraStreamBubble.textContent = state.caraStreamText;
   scrollTranscript();
 }
 
-// Called when Cara's turn is fully done — locks in the final text, removes cursor
+// Lock in Cara's bubble when her turn is done; optionally correct with final clean text
 function finaliseCaraStream(finalText) {
-  if (!state.caraStreamingDiv) return;
-  if (finalText) state.caraStreamingDiv.textContent = finalText;
-  state.caraStreamingDiv.classList.remove("tx-streaming");
-  state.caraStreamingDiv = null;
-  state.caraStreamingContent = "";
+  if (!state.caraStreamBubble) return;
+  if (finalText && finalText.trim()) {
+    state.caraStreamBubble.textContent = finalText.trim();
+    state.caraStreamText = finalText.trim();
+  }
+  state.caraStreamBubble.classList.remove("tx-streaming");
+  state.caraStreamBubble = null;
+  state.caraStreamText = "";
 }
 
 function scrollTranscript() {
@@ -360,30 +406,30 @@ function scrollTranscript() {
 
 // ── Copy transcript ───────────────────────────────────────────────
 function copyTranscript() {
-  const lines = [];
-  transcriptEl.querySelectorAll(".tx-row, .tx-system").forEach((el) => {
-    if (el.classList.contains("tx-system")) {
-      lines.push(`[${el.textContent}]`);
-    } else {
-      const label = el.querySelector(".tx-label")?.textContent || "";
-      const text = el.querySelector(".tx-bubble")?.textContent || "";
-      const time = el.querySelector(".tx-time")?.textContent || "";
-      if (text.trim()) lines.push(`${time}  ${label}: ${text}`);
-    }
-  });
-  const full = lines.join("\n");
+  // Build from conversationLog — guaranteed to have all finalised turns
+  const lines = state.conversationLog
+    .filter((e) => e.text.trim())
+    .map((e) => {
+      const label = e.role === "cara" ? "Cara" : "You";
+      return `[${e.time}]  ${label}: ${e.text}`;
+    });
+
+  if (lines.length === 0) {
+    copyBtn.textContent = "Nothing to copy yet";
+    setTimeout(() => {
+      copyBtn.textContent = "📋 Copy Transcript";
+    }, 2000);
+    return;
+  }
+
+  const header = `Atech Virtual Assistant — Conversation Transcript\nSession: ${new Date().toLocaleString()}\n${"─".repeat(60)}\n`;
+  const full = header + lines.join("\n");
+
   navigator.clipboard
     .writeText(full)
-    .then(() => {
-      copyBtn.textContent = "✓ Copied!";
-      copyBtn.style.background = "var(--success)";
-      setTimeout(() => {
-        copyBtn.textContent = "📋 Copy Transcript";
-        copyBtn.style.background = "";
-      }, 2000);
-    })
+    .then(() => flashCopyBtn("✓ Copied!"))
     .catch(() => {
-      // Fallback for browsers that block clipboard
+      // Fallback
       const ta = document.createElement("textarea");
       ta.value = full;
       ta.style.position = "fixed";
@@ -392,11 +438,20 @@ function copyTranscript() {
       ta.select();
       document.execCommand("copy");
       document.body.removeChild(ta);
-      copyBtn.textContent = "✓ Copied!";
-      setTimeout(() => {
-        copyBtn.textContent = "📋 Copy Transcript";
-      }, 2000);
+      flashCopyBtn("✓ Copied!");
     });
+}
+
+function flashCopyBtn(msg) {
+  const orig = copyBtn.textContent;
+  copyBtn.textContent = msg;
+  copyBtn.style.color = "var(--success)";
+  copyBtn.style.borderColor = "var(--success)";
+  setTimeout(() => {
+    copyBtn.textContent = orig;
+    copyBtn.style.color = "";
+    copyBtn.style.borderColor = "";
+  }, 2000);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -405,14 +460,12 @@ function escapeHtml(text) {
   d.textContent = text;
   return d.innerHTML;
 }
-
 function timestamp() {
   return new Date().toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
   });
 }
-
 function setConnectionStatus(status) {
   const map = {
     connected: { text: "Connected", cls: "connected" },
@@ -425,7 +478,6 @@ function setConnectionStatus(status) {
     statusDot.className = `status-dot ${s.cls}`;
   }
 }
-
 function setControlsEnabled(enabled) {
   [micBtn, sendBtn, messageInput].forEach((el) => {
     if (el) el.disabled = !enabled;
@@ -433,7 +485,6 @@ function setControlsEnabled(enabled) {
   connectBtn.disabled = enabled;
   disconnectBtn.disabled = !enabled;
 }
-
 function formatDuration(seconds) {
   if (seconds < 60) return `${seconds}s`;
   const m = Math.floor(seconds / 60);
@@ -455,7 +506,6 @@ async function endSession(reason) {
     state.anamClient.stopStreaming();
     state.anamClient = null;
   }
-  if (state.localStream) state.localStream.getTracks().forEach((t) => t.stop());
   if (!state.sessionToken) return;
   try {
     await fetch("/api/codes/end-session", {
@@ -475,7 +525,6 @@ async function endSession(reason) {
 
 window.addEventListener("beforeunload", () => {
   if (state.anamClient) state.anamClient.stopStreaming();
-  if (state.localStream) state.localStream.getTracks().forEach((t) => t.stop());
 });
 
 init();
