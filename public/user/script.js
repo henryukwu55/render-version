@@ -145,87 +145,84 @@ async function connect() {
   }
 
   setConnectionStatus("connecting");
+  connectBtn.disabled = true;
   addTranscript("system", "Connecting to Cara…");
 
   try {
-    // Fetch Anam session token from our backend
+    // 1. Get Anam session token from our backend
     const tokenRes = await fetch("/api/anam/token");
     const tokenData = await tokenRes.json();
 
     if (tokenData.demo_mode || !tokenData.session_token) {
-      // Demo mode — no Anam key configured
       addTranscript(
         "system",
-        "⚠️ Running in demo mode. Anam AI not configured.",
+        "⚠️ ANAM_API_KEY not configured on server. Running in demo mode.",
       );
       state.isConnected = true;
       setConnectionStatus("connected");
       setControlsEnabled(true);
-      addTranscript("system", "✓ Demo connected! You can type messages below.");
       return;
     }
 
-    // Request microphone permission
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    state.localStream = stream;
+    // 2. Dynamically import the Anam SDK from esm.sh (no build step needed)
+    const { createClient } =
+      await import("https://esm.sh/@anam-ai/js-sdk@latest");
 
-    // If Anam SDK is loaded, use it
-    if (typeof window.AnamClient !== "undefined") {
-      state.anamClient = window.AnamClient.createClientWithSessionToken(
-        tokenData.session_token,
-      );
+    // 3. Create client with the session token
+    state.anamClient = createClient(tokenData.session_token);
 
-      state.anamClient.addListener("CONNECTION_ESTABLISHED", () => {
-        state.isConnected = true;
-        setConnectionStatus("connected");
-        setControlsEnabled(true);
-        addTranscript(
-          "system",
-          "✓ Connected to Cara! Click the microphone or type below.",
-        );
-        anamVideo.style.display = "block";
-        avatarPlaceholder.style.display = "none";
-      });
+    // 4. Listen for talk events to show transcript
+    state.anamClient.addListener("TALK_STREAM_STARTED", () => {
+      addTranscript("assistant", "Cara is speaking…");
+    });
 
-      state.anamClient.addListener("MESSAGE_HISTORY_UPDATED", (messages) => {
-        // Handled via stream events
-      });
+    state.anamClient.addListener("CONNECTION_CLOSED", () => {
+      setConnectionStatus("disconnected");
+      setControlsEnabled(false);
+      connectBtn.disabled = false;
+      addTranscript("system", "Connection closed.");
+    });
 
-      state.anamClient.addListener("CONNECTION_CLOSED", () => {
-        setConnectionStatus("disconnected");
-        setControlsEnabled(false);
-        addTranscript("system", "Connection closed.");
-      });
+    // 5. Start streaming to the video element
+    await state.anamClient.streamToVideoElement("anam-video");
 
-      await state.anamClient.startStreaming(anamVideo);
-    } else {
-      // Anam SDK not loaded via CDN — fallback
-      state.isConnected = true;
-      setConnectionStatus("connected");
-      setControlsEnabled(true);
-      addTranscript(
-        "system",
-        "✓ Session token obtained. Load the Anam SDK to enable avatar.",
-      );
-    }
+    // Show video, hide placeholder
+    anamVideo.style.display = "block";
+    avatarPlaceholder.style.display = "none";
+
+    state.isConnected = true;
+    setConnectionStatus("connected");
+    setControlsEnabled(true);
+    addTranscript(
+      "system",
+      "✓ Connected to Cara! Start speaking — she can hear you automatically.",
+    );
   } catch (err) {
     console.error("Connection error:", err);
     setConnectionStatus("disconnected");
+    connectBtn.disabled = false;
     addTranscript("system", `❌ Connection failed: ${err.message}`);
   }
 }
 
 // ── Disconnect ────────────────────────────────────────────────────
 function disconnect() {
+  if (state.anamClient) {
+    state.anamClient.stopStreaming();
+    state.anamClient = null;
+  }
   if (state.localStream) {
     state.localStream.getTracks().forEach((t) => t.stop());
     state.localStream = null;
   }
-  if (state.anamClient?.stopStreaming) state.anamClient.stopStreaming();
+  anamVideo.srcObject = null;
+  anamVideo.style.display = "none";
+  avatarPlaceholder.style.display = "flex";
   state.isConnected = false;
   state.isMicOn = false;
   setConnectionStatus("disconnected");
   setControlsEnabled(false);
+  connectBtn.disabled = false;
   micBtn.classList.remove("active");
   micStatus.textContent = "Microphone: off";
   addTranscript("system", "Disconnected.");
@@ -242,7 +239,7 @@ function toggleMicrophone() {
     state.isMicOn = true;
     micBtn.classList.add("active");
     micStatus.textContent = "Microphone: active — Cara is listening";
-    addTranscript("system", "🎤 Microphone on. Start speaking naturally.");
+    addTranscript("system", "🎤 Microphone on.");
   } else {
     state.anamClient?.muteInputAudio?.();
     state.isMicOn = false;
@@ -260,12 +257,10 @@ function sendTextMessage() {
   if (state.anamClient?.sendUserMessage) {
     state.anamClient.sendUserMessage(message);
   } else {
-    setTimeout(() => {
-      addTranscript(
-        "assistant",
-        "Demo mode: Anam AI will respond here when configured.",
-      );
-    }, 500);
+    addTranscript(
+      "assistant",
+      "Demo mode: connect to Anam to get real responses.",
+    );
   }
   messageInput.value = "";
 }
@@ -330,8 +325,11 @@ async function expireSession() {
 
 async function endSession(reason) {
   clearInterval(state.timerInterval);
+  if (state.anamClient) {
+    state.anamClient.stopStreaming();
+    state.anamClient = null;
+  }
   if (state.localStream) state.localStream.getTracks().forEach((t) => t.stop());
-  if (state.anamClient?.stopStreaming) state.anamClient.stopStreaming();
   if (!state.sessionToken) return;
 
   try {
@@ -352,8 +350,8 @@ async function endSession(reason) {
 }
 
 window.addEventListener("beforeunload", () => {
+  if (state.anamClient) state.anamClient.stopStreaming();
   if (state.localStream) state.localStream.getTracks().forEach((t) => t.stop());
-  if (state.anamClient?.stopStreaming) state.anamClient.stopStreaming();
 });
 
 init();
