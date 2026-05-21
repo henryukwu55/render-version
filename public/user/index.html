@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atech Virtual Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0c0c10;
+        --bg2: #13131a;
+        --bg3: #1a1a24;
+        --border: rgba(255, 255, 255, 0.08);
+        --accent: #7c6dfa;
+        --accent2: #a78bfa;
+        --text: #e8e8f0;
+        --muted: #888898;
+        --success: #34d399;
+        --danger: #f87171;
+        --warn: #fbbf24;
+        --radius: 10px;
+        --font-mono: "Space Mono", monospace;
+        --font: "DM Sans", sans-serif;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 14px;
+      }
+      .hidden {
+        display: none !important;
+      }
+
+      /* Code Entry Screen */
+      .code-entry-wrap {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(
+          ellipse at 50% 0%,
+          rgba(124, 109, 250, 0.15) 0%,
+          transparent 70%
+        );
+      }
+      .code-card {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 2.5rem;
+        width: 100%;
+        max-width: 400px;
+        text-align: center;
+      }
+      .brand-logo {
+        display: flex;
+        align-items: baseline;
+        gap: 2px;
+        justify-content: center;
+        margin-bottom: 4px;
+      }
+      .logo-a {
+        font-family: var(--font-mono);
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--accent2);
+      }
+      .logo-text {
+        font-family: var(--font-mono);
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 4px;
+      }
+      .card-sub {
+        color: var(--muted);
+        font-size: 13px;
+        margin-bottom: 2rem;
+      }
+
+      .code-input-wrap {
+        position: relative;
+        margin-bottom: 1rem;
+      }
+      .code-input {
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 3px;
+        outline: none;
+        padding: 14px 18px;
+        text-align: center;
+        text-transform: uppercase;
+        transition: border-color 0.2s;
+        width: 100%;
+      }
+      .code-input:focus {
+        border-color: var(--accent);
+      }
+      .code-input::placeholder {
+        color: var(--muted);
+        font-size: 16px;
+        letter-spacing: 1px;
+      }
+
+      .submit-btn {
+        background: var(--accent);
+        border: none;
+        border-radius: var(--radius);
+        color: #fff;
+        cursor: pointer;
+        font-family: var(--font);
+        font-size: 15px;
+        font-weight: 600;
+        padding: 13px;
+        transition: opacity 0.15s;
+        width: 100%;
+      }
+      .submit-btn:hover {
+        opacity: 0.88;
+      }
+      .submit-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .code-error {
+        color: var(--danger);
+        font-size: 13px;
+        margin-top: 0.75rem;
+        min-height: 20px;
+      }
+
+      /* App Screen */
+      #app-screen {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+      }
+      .app-header {
+        background: var(--bg2);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.5rem;
+      }
+      .app-brand {
+        display: flex;
+        align-items: baseline;
+        gap: 2px;
+      }
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
+      .timer {
+        font-family: var(--font-mono);
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--success);
+        letter-spacing: 2px;
+      }
+      .timer.urgent {
+        color: var(--danger);
+        animation: pulse 1s infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+
+      .connection-status {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--muted);
+      }
+      .status-dot.connected {
+        background: var(--success);
+      }
+
+      .app-body {
+        flex: 1;
+        display: flex;
+        overflow: hidden;
+      }
+
+      /* Avatar Panel */
+      .avatar-panel {
+        width: 50%;
+        background: var(--bg);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        gap: 1.5rem;
+      }
+      .avatar-container {
+        width: 280px;
+        height: 280px;
+        border-radius: 50%;
+        overflow: hidden;
+        border: 3px solid var(--border);
+        background: var(--bg3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #anam-video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: none;
+      }
+      .avatar-placeholder {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+        color: var(--muted);
+      }
+      .avatar-icon {
+        font-size: 64px;
+      }
+      .avatar-controls {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      .control-btn {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        cursor: pointer;
+        font-family: var(--font);
+        font-size: 13px;
+        padding: 8px 16px;
+        transition: all 0.15s;
+      }
+      .control-btn:hover {
+        border-color: var(--accent);
+        color: var(--accent2);
+      }
+      .control-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .control-btn.active {
+        background: rgba(124, 109, 250, 0.15);
+        border-color: var(--accent);
+        color: var(--accent2);
+      }
+      .control-btn.danger {
+        border-color: rgba(248, 113, 113, 0.3);
+        color: var(--danger);
+      }
+      .control-btn.danger:hover {
+        background: rgba(248, 113, 113, 0.1);
+      }
+
+      .mic-status {
+        color: var(--muted);
+        font-size: 12px;
+        text-align: center;
+      }
+
+      /* Chat Panel */
+      .chat-panel {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .transcript {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1.25rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      .message {
+        max-width: 85%;
+      }
+      .message.user {
+        align-self: flex-end;
+      }
+      .message.assistant {
+        align-self: flex-start;
+      }
+      .message.system {
+        align-self: center;
+        max-width: 100%;
+      }
+
+      .message .role {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 3px;
+      }
+      .message.user .role {
+        text-align: right;
+      }
+      .message.system .role {
+        text-align: center;
+      }
+
+      .message .content {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      .message.user .content {
+        background: rgba(124, 109, 250, 0.12);
+        border-color: rgba(124, 109, 250, 0.3);
+      }
+      .message.system .content {
+        background: transparent;
+        border: none;
+        color: var(--muted);
+        font-size: 12px;
+        text-align: center;
+      }
+      .message .timestamp {
+        font-size: 10px;
+        color: var(--muted);
+        margin-top: 3px;
+      }
+      .message.user .timestamp {
+        text-align: right;
+      }
+
+      /* Chat input */
+      .chat-input-area {
+        background: var(--bg2);
+        border-top: 1px solid var(--border);
+        padding: 1rem;
+      }
+      .chat-input-row {
+        display: flex;
+        gap: 8px;
+      }
+      .chat-input {
+        flex: 1;
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 13px;
+        outline: none;
+        padding: 10px 14px;
+        transition: border-color 0.2s;
+      }
+      .chat-input:focus {
+        border-color: var(--accent);
+      }
+      .send-btn {
+        background: var(--accent);
+        border: none;
+        border-radius: 8px;
+        color: #fff;
+        cursor: pointer;
+        font-family: var(--font);
+        font-size: 13px;
+        font-weight: 600;
+        padding: 10px 18px;
+        transition: opacity 0.15s;
+      }
+      .send-btn:hover {
+        opacity: 0.88;
+      }
+      .send-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      /* Expired overlay */
+      .expired-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.85);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+      }
+      .expired-card {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 2.5rem;
+        text-align: center;
+        max-width: 360px;
+      }
+      .expired-icon {
+        font-size: 48px;
+        margin-bottom: 1rem;
+      }
+      .expired-title {
+        font-size: 20px;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+      }
+      .expired-sub {
+        color: var(--muted);
+        font-size: 13px;
+        margin-bottom: 1.5rem;
+      }
+
+      @media (max-width: 768px) {
+        .app-body {
+          flex-direction: column;
+        }
+        .avatar-panel {
+          width: 100%;
+          height: 40vh;
+          border-right: none;
+          border-bottom: 1px solid var(--border);
+          padding: 1rem;
+        }
+        .avatar-container {
+          width: 160px;
+          height: 160px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- CODE ENTRY SCREEN -->
+    <div id="code-entry-screen" class="code-entry-wrap">
+      <div class="code-card">
+        <div class="brand-logo">
+          <span class="logo-a">A</span><span class="logo-text">TECH</span>
+        </div>
+        <p class="card-sub">
+          Virtual Assistant — Enter your access code to begin
+        </p>
+        <div class="code-input-wrap">
+          <input
+            type="text"
+            id="access-code-input"
+            class="code-input"
+            placeholder="AT-XXXXX"
+            maxlength="8"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+        <button class="submit-btn" id="submit-code-btn">Start Session</button>
+        <p class="code-error" id="code-error"></p>
+      </div>
+    </div>
+
+    <!-- APP SCREEN -->
+    <div id="app-screen" class="hidden">
+      <header class="app-header">
+        <div class="app-brand">
+          <span class="logo-a">A</span><span class="logo-text">TECH</span>
+        </div>
+        <div class="header-right">
+          <div class="connection-status">
+            <span class="status-dot" id="status-dot"></span>
+            <span id="status-text">Disconnected</span>
+          </div>
+          <div class="timer" id="timer-display">00:00</div>
+        </div>
+      </header>
+
+      <div class="app-body">
+        <!-- Avatar / Controls -->
+        <div class="avatar-panel">
+          <div class="avatar-container">
+            <video id="anam-video" autoplay playsinline></video>
+            <div class="avatar-placeholder" id="avatar-placeholder">
+              <div class="avatar-icon">🤖</div>
+              <span style="font-size: 13px">Cara — AI Assistant</span>
+            </div>
+          </div>
+
+          <div class="avatar-controls">
+            <button class="control-btn" id="connect-btn">
+              Connect to Cara
+            </button>
+            <button class="control-btn" id="disconnect-btn" disabled>
+              Disconnect
+            </button>
+            <button class="control-btn" id="mic-btn" disabled>
+              🎤 Microphone
+            </button>
+          </div>
+
+          <p class="mic-status" id="mic-status">Microphone: off</p>
+
+          <button class="control-btn danger" id="end-session-btn">
+            End Session
+          </button>
+        </div>
+
+        <!-- Chat / Transcript -->
+        <div class="chat-panel">
+          <div class="transcript" id="transcript"></div>
+          <div class="chat-input-area">
+            <div class="chat-input-row">
+              <input
+                type="text"
+                class="chat-input"
+                id="message-input"
+                placeholder="Type a message to Cara…"
+                disabled
+              />
+              <button class="send-btn" id="send-btn" disabled>Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXPIRED OVERLAY -->
+    <div id="expired-overlay" class="expired-overlay hidden">
+      <div class="expired-card">
+        <div class="expired-icon">⏱️</div>
+        <div class="expired-title">Session Expired</div>
+        <p class="expired-sub">
+          Your session time has ended. Please request a new access code to
+          continue.
+        </p>
+        <button class="submit-btn" id="restart-btn">Start Over</button>
+      </div>
+    </div>
+
+    <script src="/user/script.js"></script>
+  </body>
+</html>

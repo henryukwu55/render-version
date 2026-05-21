@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atech Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/admin/css/style.css" />
+  </head>
+  <body>
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="login-wrap hidden">
+      <div class="login-card">
+        <div class="login-logo">
+          <span class="logo-a">A</span><span class="logo-text">TECH</span>
+        </div>
+        <p class="login-sub">Virtual Assistant Admin</p>
+        <form id="login-form">
+          <div class="field">
+            <label>Email</label>
+            <input
+              type="email"
+              id="login-email"
+              placeholder="xyz@amsterdam.tech"
+              required
+            />
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <input
+              type="password"
+              id="login-password"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          <div id="login-error" class="error-msg hidden"></div>
+          <button type="submit" class="btn-primary full" id="login-btn">
+            Sign In
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div id="dashboard" class="hidden">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="logo-a">A</span><span class="logo-text">TECH</span>
+        </div>
+        <nav>
+          <a class="nav-item active" data-tab="overview">
+            <svg viewBox="0 0 24 24">
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+            Overview
+          </a>
+          <a class="nav-item" data-tab="codes">
+            <svg viewBox="0 0 24 24">
+              <rect x="2" y="7" width="20" height="14" rx="2" />
+              <path d="M16 7V5a2 2 0 0 0-4 0v2" />
+              <line x1="12" y1="12" x2="12" y2="16" />
+              <circle cx="12" cy="12" r="1" />
+            </svg>
+            Access Codes
+          </a>
+          <a class="nav-item" data-tab="analytics">
+            <svg viewBox="0 0 24 24">
+              <line x1="18" y1="20" x2="18" y2="10" />
+              <line x1="12" y1="20" x2="12" y2="4" />
+              <line x1="6" y1="20" x2="6" y2="14" />
+            </svg>
+            Analytics
+          </a>
+        </nav>
+        <div class="sidebar-footer">
+          <span id="admin-email-label"></span>
+          <button class="btn-ghost" id="logout-btn">Logout</button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <!-- OVERVIEW TAB -->
+        <section id="tab-overview" class="tab-panel active">
+          <h1 class="page-title">Dashboard</h1>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">Codes Generated</div>
+              <div class="stat-val" id="stat-codes">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Total Sessions</div>
+              <div class="stat-val" id="stat-sessions">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Expired Sessions</div>
+              <div class="stat-val" id="stat-expired">—</div>
+            </div>
+            <div class="stat-card accent">
+              <div class="stat-label">Active Now</div>
+              <div class="stat-val" id="stat-active">—</div>
+            </div>
+          </div>
+          <h2 class="section-title">Last 7 Days</h2>
+          <div id="daily-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Sessions</th>
+                  <th>Codes Used</th>
+                  <th>Expired</th>
+                </tr>
+              </thead>
+              <tbody id="daily-tbody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- CODES TAB -->
+        <section id="tab-codes" class="tab-panel hidden">
+          <h1 class="page-title">Access Codes</h1>
+          <div class="generate-box">
+            <div class="field inline">
+              <label>Duration</label>
+              <select id="code-duration">
+                <option value="900">15 minutes</option>
+                <option value="1800">30 minutes</option>
+                <option value="3600" selected>1 hour</option>
+                <option value="7200">2 hours</option>
+                <option value="86400">24 hours</option>
+              </select>
+            </div>
+            <button class="btn-primary" id="gen-code-btn">Generate Code</button>
+            <div id="new-code-display" class="code-badge hidden"></div>
+          </div>
+          <div id="codes-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Duration</th>
+                  <th>Created</th>
+                  <th>Expires</th>
+                  <th>Status</th>
+                  <th>Sessions</th>
+                </tr>
+              </thead>
+              <tbody id="codes-tbody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ANALYTICS TAB -->
+        <section id="tab-analytics" class="tab-panel hidden">
+          <h1 class="page-title">Analytics</h1>
+          <h2 class="section-title">Code Performance</h2>
+          <div id="perf-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Duration</th>
+                  <th>Times Used</th>
+                  <th>Avg Duration</th>
+                  <th>Completed</th>
+                  <th>Expired</th>
+                </tr>
+              </thead>
+              <tbody id="perf-tbody"></tbody>
+            </table>
+          </div>
+          <h2 class="section-title">Recent Events</h2>
+          <div class="event-filters">
+            <button class="filter-btn active" data-type="">All</button>
+            <button class="filter-btn" data-type="session_start">
+              Session Start
+            </button>
+            <button class="filter-btn" data-type="session_end">
+              Session End
+            </button>
+            <button class="filter-btn" data-type="code_generated">
+              Code Generated
+            </button>
+          </div>
+          <div id="events-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Event</th>
+                  <th>Code</th>
+                </tr>
+              </thead>
+              <tbody id="events-tbody"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/admin/js/app.js"></script>
+  </body>
+</html>
