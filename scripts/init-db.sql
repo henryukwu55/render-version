@@ -1,6 +1,6 @@
 -- ============================================================
 -- Atech Virtual Assistant — Neon PostgreSQL Schema
--- Run this once in the Neon SQL Editor on your dashboard
+-- Safe to run multiple times (fully idempotent)
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS admin_users (
@@ -76,7 +76,9 @@ CREATE INDEX IF NOT EXISTS idx_user_sessions_token     ON user_sessions(session_
 CREATE INDEX IF NOT EXISTS idx_analytics_events_type   ON analytics_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_analytics_events_date   ON analytics_events(created_at);
 
--- Auto-expire old admin sessions on each new login
+-- Function + trigger to auto-expire old admin sessions on each new login.
+-- CREATE OR REPLACE handles re-runs safely.
+-- The trigger uses DO $$ ... $$ to skip creation only if it already exists.
 CREATE OR REPLACE FUNCTION expire_old_sessions()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -85,10 +87,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trigger_expire_sessions ON admin_sessions;
-CREATE TRIGGER trigger_expire_sessions
-    AFTER INSERT ON admin_sessions
-    EXECUTE FUNCTION expire_old_sessions();
-
--- NOTE: No RLS policies needed — Neon is plain Postgres, not Supabase.
--- Access control is handled entirely by your Express middleware.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger
+        WHERE tgname = 'trigger_expire_sessions'
+    ) THEN
+        CREATE TRIGGER trigger_expire_sessions
+            AFTER INSERT ON admin_sessions
+            EXECUTE FUNCTION expire_old_sessions();
+    END IF;
+END;
+$$;
