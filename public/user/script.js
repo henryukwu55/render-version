@@ -347,42 +347,43 @@ function addSystemNote(text) {
 function addUserBubble(text, addToDOM = true) {
   if (!text || !text.trim()) return;
   const time = timestamp();
-  // Add to conversation log
   state.conversationLog.push({
     role: "user",
     text: text.trim(),
     time,
     final: true,
   });
-  if (!addToDOM) return; // called from history update when DOM already has it
+  if (!addToDOM) return;
   const wrap = document.createElement("div");
   wrap.className = "tx-row tx-user";
-  wrap.innerHTML = `
-    <div class="tx-label">You</div>
-    <div class="tx-bubble">${escapeHtml(text)}</div>
-    <div class="tx-time">${time}</div>`;
+  // Inline format: "Student: " then quoted text then timestamp
+  wrap.innerHTML =
+    `<span class="tx-label">Student:</span>` +
+    `<span class="tx-bubble">${escapeHtml(text.trim())}</span>` +
+    `<span class="tx-time">${time}</span>`;
   transcriptEl.appendChild(wrap);
   scrollTranscript();
 }
 
-// APPEND incremental words to the live Cara bubble
+// APPEND incremental words to the live Cara paragraph
 function appendToCaraStream(fragment) {
   if (!fragment) return;
   if (!state.caraStreamBubble) {
-    // First fragment of a new Cara turn — create the bubble
+    // First fragment — create the row
     const time = timestamp();
     state.conversationLog.push({ role: "cara", text: "", time, final: false });
     const wrap = document.createElement("div");
     wrap.className = "tx-row tx-cara";
-    wrap.innerHTML = `
-      <div class="tx-label">Cara</div>
-      <div class="tx-bubble tx-streaming"></div>
-      <div class="tx-time">${time}</div>`;
+    // Label is inline, bubble fills after it, time at end
+    wrap.innerHTML =
+      `<span class="tx-label">Cara (VA):</span>` +
+      `<span class="tx-bubble tx-streaming"></span>` +
+      `<span class="tx-time">${time}</span>`;
     transcriptEl.appendChild(wrap);
     state.caraStreamBubble = wrap.querySelector(".tx-bubble");
     state.caraStreamText = "";
   }
-  // APPEND the new fragment (not replace)
+  // APPEND fragment — do not replace
   state.caraStreamText += fragment;
   state.caraStreamBubble.textContent = state.caraStreamText;
   scrollTranscript();
@@ -410,8 +411,8 @@ function copyTranscript() {
   const lines = state.conversationLog
     .filter((e) => e.text.trim())
     .map((e) => {
-      const label = e.role === "cara" ? "Cara" : "You";
-      return `[${e.time}]  ${label}: ${e.text}`;
+      const label = e.role === "cara" ? "Cara (VA)" : "Student";
+      return `${label}: "${e.text.trim()}"\n[${e.time}]`;
     });
 
   if (lines.length === 0) {
@@ -422,8 +423,8 @@ function copyTranscript() {
     return;
   }
 
-  const header = `Atech Virtual Assistant — Conversation Transcript\nSession: ${new Date().toLocaleString()}\n${"─".repeat(60)}\n`;
-  const full = header + lines.join("\n");
+  const header = `Atech Virtual Assistant — Conversation Transcript\nSession: ${new Date().toLocaleString()}\n${"─".repeat(60)}`;
+  const full = header + "\n\n" + lines.join("\n\n");
 
   navigator.clipboard
     .writeText(full)
