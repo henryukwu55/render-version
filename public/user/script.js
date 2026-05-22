@@ -9,9 +9,13 @@ const state = {
   isMicOn: false,
   accessCode: null,
   // Transcript
-  caraStreamBubble: null, // live <div class="tx-bubble"> being updated
-  caraStreamText: "", // accumulated text for current Cara turn
-  conversationLog: [], // [{role, text, time}] — source of truth for copy
+  caraStreamBubble: null,
+  caraStreamText: "",
+  conversationLog: [],
+  // Student activity detection
+  studentTyping: false,
+  studentSpeaking: false,
+  typingTimer: null, // debounce — clears "typing" state after pause
 };
 
 // ── DOM ──────────────────────────────────────────────────────────
@@ -51,6 +55,9 @@ function init() {
   messageInput.addEventListener("keypress", (e) => {
     if (e.key === "Enter") sendTextMessage();
   });
+  // Detect typing — pause Pablo's output while student is composing
+  messageInput.addEventListener("input", onStudentTyping);
+  messageInput.addEventListener("blur", onStudentStoppedTyping);
   endSessionBtn.addEventListener("click", () => endSession("manual"));
   restartBtn.addEventListener("click", () => location.reload());
   copyBtn.addEventListener("click", copyTranscript);
@@ -206,10 +213,10 @@ async function connect() {
 
     // ── User speech events ─────────────────────────────────────
     state.anamClient.addListener("USER_SPEECH_STARTED", () => {
-      micStatus.textContent = "🎤 Listening…";
+      onStudentSpeaking();
     });
     state.anamClient.addListener("USER_SPEECH_ENDED", () => {
-      micStatus.textContent = "Microphone: active — Cara can hear you";
+      onStudentFinishedSpeaking();
     });
 
     // ── Transcript: streaming (word-by-word APPEND) ────────────
@@ -299,6 +306,81 @@ function disconnect() {
   micBtn.textContent = "🎤 Microphone";
   micStatus.textContent = "Microphone: off";
   addSystemNote("Disconnected.");
+}
+
+// ── Student activity detection ───────────────────────────────────
+// When student types, mute the MIC INPUT so the SDK silence detector
+// doesn't think the student has gone quiet and trigger Pablo to speak.
+// We also mute Pablo's output so he doesn't talk over the typing.
+function onStudentTyping() {
+  if (!state.isConnected || !state.anamClient) return;
+  if (!state.studentTyping) {
+    state.studentTyping = true;
+    // Mute mic input — stops SDK silence detector from firing
+    state.anamClient.muteInputAudio?.();
+    // Also mute Pablo's output so he doesn't interrupt
+    state.anamClient.muteOutputAudio?.();
+    setStudentActivityIndicator("typing");
+  }
+  // Debounce — if student stops typing for 2.5s, release
+  clearTimeout(state.typingTimer);
+  state.typingTimer = setTimeout(onStudentStoppedTyping, 2500);
+}
+
+function onStudentStoppedTyping() {
+  if (!state.studentTyping) return;
+  state.studentTyping = false;
+  clearTimeout(state.typingTimer);
+  if (!state.studentSpeaking) {
+    // Restore mic input so Pablo can hear again
+    state.anamClient?.unmuteInputAudio?.();
+    state.anamClient?.unmuteOutputAudio?.();
+    setStudentActivityIndicator(null);
+    // Sync mic button state
+    if (state.isMicOn) {
+      micStatus.textContent = "Microphone: active — Pablo can hear you";
+    }
+  }
+}
+
+// Called by USER_SPEECH_STARTED SDK event
+function onStudentSpeaking() {
+  state.studentSpeaking = true;
+  // Don't mute input — the student IS speaking, SDK should hear them
+  // Mute Pablo's output so he doesn't talk over the student
+  state.anamClient?.muteOutputAudio?.();
+  micStatus.textContent = "🎤 Listening…";
+  setStudentActivityIndicator("speaking");
+}
+
+// Called by USER_SPEECH_ENDED SDK event
+function onStudentFinishedSpeaking() {
+  state.studentSpeaking = false;
+  micStatus.textContent = "Microphone: active — Pablo can hear you";
+  if (!state.studentTyping) {
+    state.anamClient?.unmuteOutputAudio?.();
+    setStudentActivityIndicator(null);
+  }
+}
+
+// Shows/hides the "student is responding" indicator in the transcript
+function setStudentActivityIndicator(mode) {
+  let el = document.getElementById("student-activity-indicator");
+  if (!mode) {
+    if (el) el.remove();
+    return;
+  }
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "student-activity-indicator";
+    el.className = "tx-system tx-activity";
+    transcriptEl.appendChild(el);
+  }
+  el.textContent =
+    mode === "typing"
+      ? "✏️  Student is typing a response…"
+      : "🎤  Student is speaking…";
+  scrollTranscript();
 }
 
 // ── Microphone toggle ─────────────────────────────────────────────

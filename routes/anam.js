@@ -54,9 +54,9 @@ RESOURCE GUIDELINES:
 Remember: Any code you write must be inside triple backtick fences. This is mandatory.`,
   voiceDetectionOptions: {
     endOfSpeechSensitivity: 0.5,
-    silenceBeforeSkipTurnSeconds: 8,
-    silenceBeforeSessionEndSeconds: 60,
-    silenceBeforeAutoEndTurnSeconds: 2,
+    silenceBeforeSkipTurnSeconds: 20, // wait 20s of silence before Pablo speaks unprompted
+    silenceBeforeSessionEndSeconds: 120,
+    silenceBeforeAutoEndTurnSeconds: 3, // slight pause before Pablo registers end of student speech
     speechEnhancementLevel: 0.9,
   },
 };
