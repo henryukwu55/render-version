@@ -96,7 +96,7 @@ async function validateCode() {
     appScreen.classList.remove("hidden");
     startTimer();
     addSystemNote(
-      `Session started — ${formatDuration(state.durationSeconds)} available. Click "Connect to AI Assistant" to begin.`,
+      `Session started — ${formatDuration(state.durationSeconds)} available. Click "Connect to Cara" to begin.`,
     );
   } catch (err) {
     codeError.textContent = "Network error. Please try again.";
@@ -132,7 +132,7 @@ async function connect() {
   }
   setConnectionStatus("connecting");
   connectBtn.disabled = true;
-  addSystemNote("Connecting to AI Assistant…");
+  addSystemNote("Connecting to Cara…");
 
   try {
     const tokenRes = await fetch("/api/anam/token");
@@ -186,10 +186,10 @@ async function connect() {
 
     // ── Connection events ──────────────────────────────────────
     state.anamClient.addListener("CONNECTION_ESTABLISHED", () => {
-      addSystemNote("✓ Connected to AI Assistant.");
+      addSystemNote("✓ Connected to Cara.");
     });
     state.anamClient.addListener("SESSION_READY", () => {
-      addSystemNote("✓ ATECH-Assistant is ready — start speaking!");
+      addSystemNote("✓ Cara is ready — start speaking!");
     });
     state.anamClient.addListener("CONNECTION_CLOSED", () => {
       finaliseCaraStream();
@@ -238,7 +238,7 @@ async function connect() {
         finaliseCaraStream(lastAssistant.content);
         // Update conversation log with clean final text
         const existing = state.conversationLog.findLast?.(
-          (e) => e.role === "pablo",
+          (e) => e.role === "cara",
         );
         if (existing && !existing.final) {
           existing.text = lastAssistant.content;
@@ -304,7 +304,7 @@ function disconnect() {
 // ── Microphone toggle ─────────────────────────────────────────────
 function toggleMicrophone() {
   if (!state.isConnected || !state.anamClient) {
-    addSystemNote("Connect to Assistant first.");
+    addSystemNote("Connect to Cara first.");
     return;
   }
   if (state.isMicOn) {
@@ -319,8 +319,8 @@ function toggleMicrophone() {
     state.isMicOn = true;
     micBtn.classList.add("active");
     micBtn.textContent = "🔇 Mute Mic";
-    micStatus.textContent = "Microphone: active — Atech-Assistant can hear you";
-    addSystemNote("🎤 Microphone active — Atech-Assistant can hear you.");
+    micStatus.textContent = "Microphone: active — Cara can hear you";
+    addSystemNote("🎤 Microphone active — Cara can hear you.");
   }
 }
 
@@ -370,77 +370,155 @@ function addUserBubble(text, addToDOM = true) {
   scrollTranscript();
 }
 
-// APPEND incremental word fragments to the live Cara paragraph
+// ── Segment parser: splits Pablo's text into speech + code blocks ──
+function parseSegments(raw) {
+  const segments = [];
+  const regex = /```(\w*)\n?([\s\S]*?)```/g;
+  let lastIndex = 0,
+    match;
+  while ((match = regex.exec(raw)) !== null) {
+    if (match.index > lastIndex)
+      segments.push({
+        type: "text",
+        content: raw.slice(lastIndex, match.index),
+      });
+    segments.push({
+      type: "code",
+      lang: match[1] || "plaintext",
+      content: match[2],
+    });
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < raw.length)
+    segments.push({ type: "text", content: raw.slice(lastIndex) });
+  return segments;
+}
+
+// Render finalised segments with syntax highlighting
+function renderSegments(parent, segments) {
+  parent.innerHTML = "";
+  segments.forEach((seg) => {
+    if (seg.type === "text") {
+      const txt = seg.content.trim();
+      if (!txt) return;
+      const span = document.createElement("span");
+      span.className = "tx-bubble-text";
+      span.textContent = "“" + txt + "”";
+      parent.appendChild(span);
+    } else {
+      const wrap = document.createElement("div");
+      wrap.className = "tx-code-wrap";
+
+      const header = document.createElement("div");
+      header.className = "tx-code-header";
+      const langLabel = document.createElement("span");
+      langLabel.textContent = seg.lang || "code";
+      const copyBtn = document.createElement("button");
+      copyBtn.className = "tx-code-copy";
+      copyBtn.textContent = "Copy";
+      copyBtn.onclick = () => {
+        navigator.clipboard.writeText(seg.content).then(() => {
+          copyBtn.textContent = "Copied!";
+          setTimeout(() => {
+            copyBtn.textContent = "Copy";
+          }, 2000);
+        });
+      };
+      header.appendChild(langLabel);
+      header.appendChild(copyBtn);
+
+      const pre = document.createElement("pre");
+      const code = document.createElement("code");
+      code.className = seg.lang ? "language-" + seg.lang : "";
+      code.textContent = seg.content;
+      pre.appendChild(code);
+      wrap.appendChild(header);
+      wrap.appendChild(pre);
+      parent.appendChild(wrap);
+      if (window.hljs) window.hljs.highlightElement(code);
+    }
+  });
+}
+
+// APPEND incremental fragments — live code preview while fence is open
 function appendToCaraStream(fragment) {
   if (!fragment) return;
   if (!state.caraStreamBubble) {
-    // First word of a new Cara turn — build the paragraph row
     const time = timestamp();
-    state.conversationLog.push({ role: "pablo", text: "", time, final: false });
+    state.conversationLog.push({ role: "cara", text: "", time, final: false });
     const wrap = document.createElement("div");
     wrap.className = "tx-row tx-cara";
     const label = document.createElement("span");
     label.className = "tx-label";
-    label.textContent = "PABLO (VA): ";
-    // Opening curly quote — stays permanently
-    const openQuote = document.createTextNode("“");
-    // Text node that grows as words arrive
-    const textNode = document.createTextNode("");
-    // Blinking cursor element — removed on finalise
+    label.textContent = "Pablo (VA): ";
+    const contentEl = document.createElement("div");
+    contentEl.className = "tx-stream-content";
     const cursor = document.createElement("span");
     cursor.className = "tx-cursor";
     cursor.textContent = "▮";
-    // Closing quote placeholder — hidden until finalised
-    const closeQuote = document.createTextNode("");
     const ts = document.createElement("span");
     ts.className = "tx-time";
     ts.textContent = time;
     wrap.appendChild(label);
-    wrap.appendChild(openQuote);
-    wrap.appendChild(textNode);
+    wrap.appendChild(contentEl);
     wrap.appendChild(cursor);
-    wrap.appendChild(closeQuote);
     wrap.appendChild(document.createTextNode(" "));
     wrap.appendChild(ts);
     transcriptEl.appendChild(wrap);
-    // Store refs so we can update them
-    state.caraStreamBubble = { wrap, textNode, cursor, closeQuote };
+    state.caraStreamBubble = { wrap, contentEl, cursor };
     state.caraStreamText = "";
   }
-  // APPEND — do not replace
+
   state.caraStreamText += fragment;
-  state.caraStreamBubble.textNode.textContent = state.caraStreamText;
+  const { contentEl } = state.caraStreamBubble;
+  const openFences = (state.caraStreamText.match(/```/g) || []).length;
+
+  if (openFences % 2 === 1) {
+    // Inside an open code fence — show live code preview
+    contentEl.innerHTML = "";
+    const fenceStart = state.caraStreamText.lastIndexOf("```");
+    const beforeCode = state.caraStreamText.slice(0, fenceStart).trim();
+    if (beforeCode) {
+      const span = document.createElement("span");
+      span.className = "tx-bubble-text";
+      span.textContent = "“" + beforeCode + "” ";
+      contentEl.appendChild(span);
+    }
+    const liveWrap = document.createElement("div");
+    liveWrap.className = "tx-code-wrap";
+    const liveHeader = document.createElement("div");
+    liveHeader.className = "tx-code-header";
+    liveHeader.textContent = "writing code…";
+    const livePre = document.createElement("div");
+    livePre.className = "tx-code-live";
+    livePre.textContent = state.caraStreamText
+      .slice(fenceStart + 3)
+      .replace(/^\w*\n/, "");
+    liveWrap.appendChild(liveHeader);
+    liveWrap.appendChild(livePre);
+    contentEl.appendChild(liveWrap);
+  } else {
+    // All fences closed — render with highlighting
+    renderSegments(contentEl, parseSegments(state.caraStreamText));
+  }
   scrollTranscript();
 }
 
-// Finalise Cara's turn — remove cursor, close the quote, optionally correct text
+// Finalise — apply full syntax highlighting, remove cursor
 function finaliseCaraStream(finalText) {
   if (!state.caraStreamBubble) return;
-  const { textNode, cursor, closeQuote } = state.caraStreamBubble;
-  // Apply corrected final text if provided
-  if (finalText && finalText.trim()) {
-    textNode.textContent = finalText.trim();
-    state.caraStreamText = finalText.trim();
-    // Update log
-    const entry =
-      state.conversationLog.findLast &&
-      state.conversationLog.findLast((e) => e.role === "pablo" && !e.final);
-    if (entry) {
-      entry.text = finalText.trim();
-      entry.final = true;
-    }
-  } else if (state.caraStreamText) {
-    const entry =
-      state.conversationLog.findLast &&
-      state.conversationLog.findLast((e) => e.role === "pablo" && !e.final);
-    if (entry) {
-      entry.text = state.caraStreamText;
-      entry.final = true;
-    }
+  const { contentEl, cursor } = state.caraStreamBubble;
+  const text =
+    finalText && finalText.trim() ? finalText.trim() : state.caraStreamText;
+  const entry =
+    state.conversationLog.findLast &&
+    state.conversationLog.findLast((e) => e.role === "cara" && !e.final);
+  if (entry) {
+    entry.text = text;
+    entry.final = true;
   }
-  // Remove blinking cursor, add closing quote
+  renderSegments(contentEl, parseSegments(text));
   if (cursor.parentNode) cursor.parentNode.removeChild(cursor);
-  closeQuote.textContent = "”";
   state.caraStreamBubble = null;
   state.caraStreamText = "";
 }
