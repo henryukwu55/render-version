@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const PERSONA_CONFIG = {
-  name: "ATECH-VIRTUAL-ASSISTANT",
+  name: "pablo",
   avatarId: "92b91f2a-4159-411f-b092-3e1b8663f6b9",
   voiceId: "95c6316e-85ac-41ae-a0c1-aa5bf3a91f5a",
   llmId: "a7cAf662c-2ace-4de1-a21e-ef0fbf144bb7",

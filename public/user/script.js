@@ -96,7 +96,7 @@ async function validateCode() {
     appScreen.classList.remove("hidden");
     startTimer();
     addSystemNote(
-      `Session started — ${formatDuration(state.durationSeconds)} available. Click "Connect to Cara" to begin.`,
+      `Session started — ${formatDuration(state.durationSeconds)} available. Click "Connect to AI Assistant" to begin.`,
     );
   } catch (err) {
     codeError.textContent = "Network error. Please try again.";
@@ -132,7 +132,7 @@ async function connect() {
   }
   setConnectionStatus("connecting");
   connectBtn.disabled = true;
-  addSystemNote("Connecting to Cara…");
+  addSystemNote("Connecting to AI Assistant…");
 
   try {
     const tokenRes = await fetch("/api/anam/token");
@@ -186,10 +186,10 @@ async function connect() {
 
     // ── Connection events ──────────────────────────────────────
     state.anamClient.addListener("CONNECTION_ESTABLISHED", () => {
-      addSystemNote("✓ Connected to Cara.");
+      addSystemNote("✓ Connected to AI Assistant.");
     });
     state.anamClient.addListener("SESSION_READY", () => {
-      addSystemNote("✓ Cara is ready — start speaking!");
+      addSystemNote("✓ ATECH-Assistant is ready — start speaking!");
     });
     state.anamClient.addListener("CONNECTION_CLOSED", () => {
       finaliseCaraStream();
@@ -238,7 +238,7 @@ async function connect() {
         finaliseCaraStream(lastAssistant.content);
         // Update conversation log with clean final text
         const existing = state.conversationLog.findLast?.(
-          (e) => e.role === "cara",
+          (e) => e.role === "pablo",
         );
         if (existing && !existing.final) {
           existing.text = lastAssistant.content;
@@ -304,7 +304,7 @@ function disconnect() {
 // ── Microphone toggle ─────────────────────────────────────────────
 function toggleMicrophone() {
   if (!state.isConnected || !state.anamClient) {
-    addSystemNote("Connect to Cara first.");
+    addSystemNote("Connect to Assistant first.");
     return;
   }
   if (state.isMicOn) {
@@ -319,8 +319,8 @@ function toggleMicrophone() {
     state.isMicOn = true;
     micBtn.classList.add("active");
     micBtn.textContent = "🔇 Mute Mic";
-    micStatus.textContent = "Microphone: active — Cara can hear you";
-    addSystemNote("🎤 Microphone active — Cara can hear you.");
+    micStatus.textContent = "Microphone: active — Atech-Assistant can hear you";
+    addSystemNote("🎤 Microphone active — Atech-Assistant can hear you.");
   }
 }
 
@@ -376,12 +376,12 @@ function appendToCaraStream(fragment) {
   if (!state.caraStreamBubble) {
     // First word of a new Cara turn — build the paragraph row
     const time = timestamp();
-    state.conversationLog.push({ role: "cara", text: "", time, final: false });
+    state.conversationLog.push({ role: "pablo", text: "", time, final: false });
     const wrap = document.createElement("div");
     wrap.className = "tx-row tx-cara";
     const label = document.createElement("span");
     label.className = "tx-label";
-    label.textContent = "Cara (VA): ";
+    label.textContent = "PABLO (VA): ";
     // Opening curly quote — stays permanently
     const openQuote = document.createTextNode("“");
     // Text node that grows as words arrive
@@ -424,7 +424,7 @@ function finaliseCaraStream(finalText) {
     // Update log
     const entry =
       state.conversationLog.findLast &&
-      state.conversationLog.findLast((e) => e.role === "cara" && !e.final);
+      state.conversationLog.findLast((e) => e.role === "pablo" && !e.final);
     if (entry) {
       entry.text = finalText.trim();
       entry.final = true;
@@ -432,7 +432,7 @@ function finaliseCaraStream(finalText) {
   } else if (state.caraStreamText) {
     const entry =
       state.conversationLog.findLast &&
-      state.conversationLog.findLast((e) => e.role === "cara" && !e.final);
+      state.conversationLog.findLast((e) => e.role === "pablo" && !e.final);
     if (entry) {
       entry.text = state.caraStreamText;
       entry.final = true;
@@ -455,7 +455,7 @@ function copyTranscript() {
   const lines = state.conversationLog
     .filter((e) => e.text.trim())
     .map((e) => {
-      const label = e.role === "cara" ? "Cara (VA)" : "Student";
+      const label = e.role === "cara" ? "Pablo (VA)" : "Student";
       return `${label}: "${e.text.trim()}"\n[${e.time}]`;
     });
 
