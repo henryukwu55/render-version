@@ -103,7 +103,7 @@ async function validateCode() {
     appScreen.classList.remove("hidden");
     startTimer();
     addSystemNote(
-      `Session started — ${formatDuration(state.durationSeconds)} available. Click "Connect to Cara" to begin.`,
+      `Session started — ${formatDuration(state.durationSeconds)} available. Click "Connect to Mentor" to begin.`,
     );
   } catch (err) {
     codeError.textContent = "Network error. Please try again.";
@@ -139,7 +139,7 @@ async function connect() {
   }
   setConnectionStatus("connecting");
   connectBtn.disabled = true;
-  addSystemNote("Connecting to Cara…");
+  addSystemNote("Connecting to Mentor…");
 
   try {
     const tokenRes = await fetch("/api/anam/token");
@@ -181,8 +181,8 @@ async function connect() {
       state.isMicOn = true;
       micBtn.classList.add("active");
       micBtn.textContent = "🔇 Mute Mic";
-      micStatus.textContent = "Microphone: active — Cara can hear you";
-      addSystemNote("✓ Microphone granted — Cara can hear you.");
+      micStatus.textContent = "Microphone: active — Mentor can hear you";
+      addSystemNote("✓ Microphone granted — Mentor can hear you.");
     });
     state.anamClient.addListener("MIC_PERMISSION_DENIED", (err) => {
       addSystemNote(
@@ -193,10 +193,10 @@ async function connect() {
 
     // ── Connection events ──────────────────────────────────────
     state.anamClient.addListener("CONNECTION_ESTABLISHED", () => {
-      addSystemNote("✓ Connected to Cara.");
+      addSystemNote("✓ Connected to Mentor.");
     });
     state.anamClient.addListener("SESSION_READY", () => {
-      addSystemNote("✓ Cara is ready — start speaking!");
+      addSystemNote("✓ Mentor is ready — start speaking!");
     });
     state.anamClient.addListener("CONNECTION_CLOSED", () => {
       finaliseCaraStream();
@@ -245,7 +245,7 @@ async function connect() {
         finaliseCaraStream(lastAssistant.content);
         // Update conversation log with clean final text
         const existing = state.conversationLog.findLast?.(
-          (e) => e.role === "cara",
+          (e) => e.role === "mentor",
         );
         if (existing && !existing.final) {
           existing.text = lastAssistant.content;
@@ -338,7 +338,7 @@ function onStudentStoppedTyping() {
     setStudentActivityIndicator(null);
     // Sync mic button state
     if (state.isMicOn) {
-      micStatus.textContent = "Microphone: active — Pablo can hear you";
+      micStatus.textContent = "Microphone: active — Mentor can hear you";
     }
   }
 }
@@ -356,7 +356,7 @@ function onStudentSpeaking() {
 // Called by USER_SPEECH_ENDED SDK event
 function onStudentFinishedSpeaking() {
   state.studentSpeaking = false;
-  micStatus.textContent = "Microphone: active — Pablo can hear you";
+  micStatus.textContent = "Microphone: active — Mentor can hear you";
   if (!state.studentTyping) {
     state.anamClient?.unmuteOutputAudio?.();
     setStudentActivityIndicator(null);
@@ -386,7 +386,7 @@ function setStudentActivityIndicator(mode) {
 // ── Microphone toggle ─────────────────────────────────────────────
 function toggleMicrophone() {
   if (!state.isConnected || !state.anamClient) {
-    addSystemNote("Connect to Cara first.");
+    addSystemNote("Connect to Mentor first.");
     return;
   }
   if (state.isMicOn) {
@@ -395,14 +395,14 @@ function toggleMicrophone() {
     micBtn.classList.remove("active");
     micBtn.textContent = "🎤 Unmute Mic";
     micStatus.textContent = "Microphone: muted";
-    addSystemNote("🔇 Microphone muted — Cara cannot hear you.");
+    addSystemNote("🔇 Microphone muted — Mentor cannot hear you.");
   } else {
     state.anamClient.unmuteInputAudio();
     state.isMicOn = true;
     micBtn.classList.add("active");
     micBtn.textContent = "🔇 Mute Mic";
-    micStatus.textContent = "Microphone: active — Cara can hear you";
-    addSystemNote("🎤 Microphone active — Cara can hear you.");
+    micStatus.textContent = "Microphone: active — MentorCara can hear you";
+    addSystemNote("🎤 Microphone active — Mentor can hear you.");
   }
 }
 
@@ -527,12 +527,17 @@ function appendToCaraStream(fragment) {
   if (!fragment) return;
   if (!state.caraStreamBubble) {
     const time = timestamp();
-    state.conversationLog.push({ role: "cara", text: "", time, final: false });
+    state.conversationLog.push({
+      role: "mentor",
+      text: "",
+      time,
+      final: false,
+    });
     const wrap = document.createElement("div");
     wrap.className = "tx-row tx-cara";
     const label = document.createElement("span");
     label.className = "tx-label";
-    label.textContent = "Pablo (VA): ";
+    label.textContent = "Mentor (VA): ";
     const contentEl = document.createElement("div");
     contentEl.className = "tx-stream-content";
     const cursor = document.createElement("span");
@@ -594,7 +599,7 @@ function finaliseCaraStream(finalText) {
     finalText && finalText.trim() ? finalText.trim() : state.caraStreamText;
   const entry =
     state.conversationLog.findLast &&
-    state.conversationLog.findLast((e) => e.role === "cara" && !e.final);
+    state.conversationLog.findLast((e) => e.role === "mentor" && !e.final);
   if (entry) {
     entry.text = text;
     entry.final = true;
@@ -615,7 +620,7 @@ function copyTranscript() {
   const lines = state.conversationLog
     .filter((e) => e.text.trim())
     .map((e) => {
-      const label = e.role === "cara" ? "Pablo (VA)" : "Student";
+      const label = e.role === "mentor" ? "Mentor (VA)" : "Student";
       return `${label}: "${e.text.trim()}"\n[${e.time}]`;
     });
 
@@ -627,7 +632,7 @@ function copyTranscript() {
     return;
   }
 
-  const header = `Atech Virtual Assistant — Conversation Transcript\nSession: ${new Date().toLocaleString()}\n${"─".repeat(60)}`;
+  const header = `AI Mentor — Conversation Transcript\nSession: ${new Date().toLocaleString()}\n${"─".repeat(60)}`;
   const full = header + "\n\n" + lines.join("\n\n");
 
   navigator.clipboard
