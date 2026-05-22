@@ -343,6 +343,23 @@
         font-style: italic;
       }
 
+      /* Student activity indicator — pulses gently to show Pablo should wait */
+      .tx-activity {
+        color: var(--accent2) !important;
+        font-style: normal !important;
+        font-size: 12px !important;
+        animation: pulse-activity 1.4s ease-in-out infinite;
+      }
+      @keyframes pulse-activity {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.45;
+        }
+      }
+
       /* Each turn is a paragraph block */
       .tx-row {
         display: block;
