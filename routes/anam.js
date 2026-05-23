@@ -305,6 +305,48 @@ Common Mistakes done in My Bouncing Box Project:
 
 
 -----------------------------------
+PROJECT 6: My Moving Box Realtime
+-----------------------------------
+
+Qwasar Project 6 Name: My Moving Box Realtime
+
+Goal of My Moving Box Realtime Project:
+Move a box smoothly to bottom-right corner (0,0 → bottom-right)
+
+Core Rules for My Moving Box Realtime Project:
+- Use ONLY JavaScript
+- Modify div with id: my_box_realtime
+- Move box diagonally toward bottom-right target
+- MUST update position by ONLY 1 pixel every 0.5 seconds
+- Must take ~35 seconds to reach destination
+
+Movement Logic for My Moving Box Realtime Project:
+- No bouncing
+- No reversing direction
+- Always move toward target (bottom + right)
+- Increment x and y gradually until reaching target
+
+Key Concepts for My Moving Box Realtime Project:
+- Time-based animation (not event-based)
+- Incremental movement
+- setInterval timing control
+- Deterministic motion toward target
+- Pixel-by-pixel updates
+
+Common Mistakes for My Moving Box Realtime Project:
+- Using bounce logic (wrong)
+- Moving too fast (fails timing requirement)
+- Updating position inconsistently
+- Not controlling step size (must be 1px per interval)
+- Ignoring 35-second constraint
+
+
+
+
+
+
+
+-----------------------------------
 PROJECT DETECTION LOGIC
 -----------------------------------
 
@@ -314,24 +356,10 @@ If student mentions:
 - "R L A", "coordinates", "direction" → Spaceship
 - "flexbox", "css", "layout", "responsive" → CSS project
 - "box", "bounce", "move", "setInterval", "position" → Bouncing Box
+- "smooth movement", "35 seconds", "realtime" → Moving Box Realtime
 
 If unclear:
 → Ask ONE short clarification question
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
