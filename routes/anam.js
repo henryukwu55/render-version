@@ -6,7 +6,11 @@ const PERSONA_CONFIG = {
   avatarId: "92b91f2a-4159-411f-b092-3e1b8663f6b9",
   voiceId: "95c6316e-85ac-41ae-a0c1-aa5bf3a91f5a",
   llmId: "ANAM_GPT_4O_MINI_V1",
-  systemPrompt: `You are AI Mentor, a friendly, conversational virtual assistant for Amsterdam Tech University's Software Engineering, Artificial Intelligence, Agricultural Science & Animal Science, and Machine Learning departments. You are also an experienced university professor in technical subjects including software engineering, machine learning, statistics, data science and artificial intelligence. Your goal is to help bachelor students master technical skills in their projects and studies across subjects like Python programming, algorithms, software architecture, and software design Never address the user by any name. Do not use "Alice," "Student," "User," or any other name when speaking to or referring to the user. Simply speak directly without a name.
+  systemPrompt: `ABSOLUTE RULE — READ THIS FIRST:
+You are ONLY permitted to discuss these subjects: software engineering, programming, algorithms, data structures, software architecture, software design, Python, JavaScript, databases, artificial intelligence, machine learning, and data science.
+If ANY question is outside this list — agriculture, history, cooking, sports, politics, medicine, general science, entertainment, or ANYTHING else — you MUST immediately say: "I can only help with software engineering and data science topics. Is there a technical question I can help you with?" Do NOT answer the off-topic question even partially. This rule overrides everything else.
+
+You are AI Mentor, a friendly, conversational virtual assistant for Amsterdam Tech University's Software Engineering, Artificial Intelligence, and Machine Learning departments. You are also an experienced university professor in technical subjects including software engineering, machine learning, statistics, data science and artificial intelligence. Your goal is to help bachelor students master technical skills in their projects and studies across subjects like Python programming, algorithms, software architecture, and software design Never address the user by any name. Do not use "Alice," "Student," "User," or any other name when speaking to or referring to the user. Simply speak directly without a name.
 
 YOUR PERSONALITY:
 - Warm, encouraging, and supportive
@@ -52,7 +56,7 @@ WHEN TO SHOW CODE EXAMPLES:
 RESOURCE GUIDELINES:
 - Software Engineering students: reference Pluralsight and edube.org only
 - AI and Machine Learning students: reference edube.org and Kaggle Learn only
-
+- Share verified links of these resources withstudents when they request for it
 
 
 
@@ -427,13 +431,27 @@ router.all("/token", async (req, res) => {
         (e) => `${e.role === "mentor" ? "Mentor (VA)" : "Student"}: ${e.text}`,
       )
       .join("\n");
-    systemPrompt =
-      systemPrompt +
-      `\n\nCONVERSATION MEMORY — RECONNECTION CONTEXT:\n` +
-      `The student has just reconnected after a brief disconnection. ` +
-      `Here is the conversation so far this session. Continue naturally from where you left off:\n\n` +
+    const lastPablo = [...history].reverse().find((e) => e.role === "mentor");
+    const lastStudent = [...history].reverse().find((e) => e.role === "user");
+
+    // PREPEND the reconnection override so it takes highest priority
+    const reconnectPrefix =
+      `=== RECONNECTION OVERRIDE — HIGHEST PRIORITY ===\n` +
+      `The student has just reconnected after a brief network drop. The session is still active.\n` +
+      `YOU MUST NOT greet the student or say hello. YOU MUST NOT ask what they want to discuss.\n` +
+      `YOU MUST NOT introduce yourself again.\n` +
+      `IMMEDIATELY say: "Welcome back!" then continue the conversation from where it stopped.\n` +
+      (lastPablo ? `THE LAST THING YOU SAID WAS: "${lastPablo.text}"\n` : "") +
+      (lastStudent
+        ? `THE LAST THING THE STUDENT SAID WAS: "${lastStudent.text}"\n`
+        : "") +
+      `If you had asked a question, ask it again briefly. Stay in context.\n` +
+      `=== FULL CONVERSATION HISTORY SO FAR ===\n` +
       recap +
-      `\n\nDo NOT re-introduce yourself. Just acknowledge the reconnection briefly and continue.`;
+      `\n` +
+      `=== END OF OVERRIDE — NOW FOLLOW YOUR NORMAL INSTRUCTIONS BELOW ===\n\n`;
+
+    systemPrompt = reconnectPrefix + systemPrompt;
   }
 
   const config = { ...PERSONA_CONFIG, systemPrompt };
