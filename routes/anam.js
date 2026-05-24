@@ -412,12 +412,31 @@ Remember: Any code you write must be inside triple backtick fences. This is mand
   },
 };
 
-router.get("/token", async (req, res) => {
+// Accept GET (first connect) or POST (reconnect with history)
+router.all("/token", async (req, res) => {
   const apiKey = process.env.ANAM_API_KEY;
+  if (!apiKey) return res.json({ session_token: null, demo_mode: true });
 
-  if (!apiKey) {
-    return res.json({ session_token: null, demo_mode: true });
+  // If reconnecting, inject conversation history into the system prompt
+  const history = req.body?.conversationHistory || [];
+  let systemPrompt = PERSONA_CONFIG.systemPrompt;
+
+  if (history.length > 0) {
+    const recap = history
+      .map(
+        (e) => `${e.role === "mentor" ? "Mentor (VA)" : "Student"}: ${e.text}`,
+      )
+      .join("\n");
+    systemPrompt =
+      systemPrompt +
+      `\n\nCONVERSATION MEMORY — RECONNECTION CONTEXT:\n` +
+      `The student has just reconnected after a brief disconnection. ` +
+      `Here is the conversation so far this session. Continue naturally from where you left off:\n\n` +
+      recap +
+      `\n\nDo NOT re-introduce yourself. Just acknowledge the reconnection briefly and continue.`;
   }
+
+  const config = { ...PERSONA_CONFIG, systemPrompt };
 
   try {
     const response = await fetch("https://api.anam.ai/v1/auth/session-token", {
@@ -426,11 +445,9 @@ router.get("/token", async (req, res) => {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({ personaConfig: PERSONA_CONFIG }),
+      body: JSON.stringify({ personaConfig: config }),
     });
-
     const data = await response.json();
-
     if (data.sessionToken) {
       res.json({ session_token: data.sessionToken, demo_mode: false });
     } else {

@@ -11,7 +11,8 @@ const state = {
   // Transcript
   caraStreamBubble: null,
   caraStreamText: "",
-  conversationLog: [],
+  conversationLog: [], // also mirrored to sessionStorage for reconnect memory
+  isReconnecting: false, // true when reconnecting mid-session (not first connect)
   // Student activity detection
   studentTyping: false,
   studentSpeaking: false,
@@ -61,6 +62,52 @@ function init() {
   endSessionBtn.addEventListener("click", () => endSession("manual"));
   restartBtn.addEventListener("click", () => location.reload());
   copyBtn.addEventListener("click", copyTranscript);
+
+  // Theme toggle
+  const themeToggle = document.getElementById("theme-toggle");
+  if (themeToggle) {
+    // Restore saved preference
+    const saved = localStorage.getItem("pablo_theme");
+    if (saved === "light") applyTheme("light");
+    themeToggle.addEventListener("click", () => {
+      const isLight = document.documentElement.dataset.theme === "light";
+      applyTheme(isLight ? "dark" : "light");
+    });
+  }
+}
+
+function applyTheme(mode) {
+  document.documentElement.dataset.theme = mode;
+  localStorage.setItem("pablo_theme", mode);
+  const btn = document.getElementById("theme-toggle");
+  if (btn) btn.textContent = mode === "light" ? "🌙 Dark" : "☀️ Light";
+}
+
+// ── Session memory helpers ───────────────────────────────────────
+function saveHistory() {
+  try {
+    sessionStorage.setItem(
+      "pablo_history",
+      JSON.stringify(
+        state.conversationLog.filter((e) => e.final && e.text.trim()),
+      ),
+    );
+  } catch (e) {}
+}
+
+function loadHistory() {
+  try {
+    const raw = sessionStorage.getItem("pablo_history");
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function clearHistory() {
+  try {
+    sessionStorage.removeItem("pablo_history");
+  } catch (e) {}
 }
 
 function formatCodeInput() {
@@ -101,6 +148,8 @@ async function validateCode() {
     state.accessCode = cleanCode;
     codeEntryScreen.classList.add("hidden");
     appScreen.classList.remove("hidden");
+    // Load any history saved from a previous connection in this session
+    state.conversationLog = loadHistory();
     startTimer();
     addSystemNote(
       `Session started — ${formatDuration(state.durationSeconds)} available. Click "Connect to Mentor" to begin.`,
@@ -142,7 +191,17 @@ async function connect() {
   addSystemNote("Connecting to Mentor…");
 
   try {
-    const tokenRes = await fetch("/api/anam/token");
+    // If we have prior conversation history, send it so Pablo can continue the context
+    const history = state.conversationLog.filter(
+      (e) => e.final && e.text.trim(),
+    );
+    state.isReconnecting = history.length > 0;
+
+    const tokenRes = await fetch("/api/anam/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversationHistory: history }),
+    });
     const tokenData = await tokenRes.json();
     if (tokenData.demo_mode || !tokenData.session_token) {
       addSystemNote("⚠️ ANAM_API_KEY not configured on server.");
@@ -279,6 +338,9 @@ async function connect() {
     state.isConnected = true;
     setConnectionStatus("connected");
     setControlsEnabled(true);
+    if (state.isReconnecting) {
+      addSystemNote("↩️ Reconnected — Pablo remembers your conversation.");
+    }
   } catch (err) {
     console.error("Connection error:", err);
     setConnectionStatus("disconnected");
@@ -386,7 +448,7 @@ function setStudentActivityIndicator(mode) {
 // ── Microphone toggle ─────────────────────────────────────────────
 function toggleMicrophone() {
   if (!state.isConnected || !state.anamClient) {
-    addSystemNote("Connect to Mentor first.");
+    addSystemNote("Connect to mentor first.");
     return;
   }
   if (state.isMicOn) {
@@ -401,7 +463,7 @@ function toggleMicrophone() {
     state.isMicOn = true;
     micBtn.classList.add("active");
     micBtn.textContent = "🔇 Mute Mic";
-    micStatus.textContent = "Microphone: active — MentorCara can hear you";
+    micStatus.textContent = "Microphone: active — Mentor can hear you";
     addSystemNote("🎤 Microphone active — Mentor can hear you.");
   }
 }
@@ -431,6 +493,7 @@ function addUserBubble(text, addToDOM = true) {
   const t = text.trim();
   const time = timestamp();
   state.conversationLog.push({ role: "user", text: t, time, final: true });
+  saveHistory();
   if (!addToDOM) return;
   const wrap = document.createElement("div");
   wrap.className = "tx-row tx-user";
@@ -604,6 +667,7 @@ function finaliseCaraStream(finalText) {
     entry.text = text;
     entry.final = true;
   }
+  saveHistory();
   renderSegments(contentEl, parseSegments(text));
   if (cursor.parentNode) cursor.parentNode.removeChild(cursor);
   state.caraStreamBubble = null;
@@ -632,7 +696,7 @@ function copyTranscript() {
     return;
   }
 
-  const header = `AI Mentor — Conversation Transcript\nSession: ${new Date().toLocaleString()}\n${"─".repeat(60)}`;
+  const header = `AI mentor — Conversation Transcript\nSession: ${new Date().toLocaleString()}\n${"─".repeat(60)}`;
   const full = header + "\n\n" + lines.join("\n\n");
 
   navigator.clipboard
@@ -716,6 +780,8 @@ async function endSession(reason) {
     state.anamClient.stopStreaming();
     state.anamClient = null;
   }
+  // Clear session memory only when session truly ends, not on disconnect
+  clearHistory();
   if (!state.sessionToken) return;
   try {
     await fetch("/api/codes/end-session", {

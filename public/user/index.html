@@ -38,6 +38,49 @@
         --font-mono: "Space Mono", monospace;
         --font: "DM Sans", sans-serif;
       }
+      /* Light theme overrides */
+      [data-theme="light"] {
+        --bg: #f4f4f8;
+        --bg2: #ffffff;
+        --bg3: #ebebf2;
+        --border: rgba(0, 0, 0, 0.1);
+        --accent: #6c5ce7;
+        --accent2: #8b73fa;
+        --text: #1a1a2e;
+        --muted: #6b6b80;
+        --success: #00a878;
+        --danger: #e05252;
+        --warn: #d4920a;
+      }
+      [data-theme="light"] .tx-code-wrap pre,
+      [data-theme="light"] .tx-code-live {
+        background: #f8f8ff;
+      }
+      [data-theme="light"] .tx-code-header {
+        background: #ebebf5;
+      }
+      [data-theme="light"] .hljs {
+        background: #f8f8ff !important;
+        color: #333 !important;
+      }
+
+      /* Theme toggle button */
+      .theme-toggle {
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        color: var(--muted);
+        cursor: pointer;
+        font-family: var(--font);
+        font-size: 12px;
+        padding: 4px 12px;
+        transition: all 0.2s;
+      }
+      .theme-toggle:hover {
+        border-color: var(--accent);
+        color: var(--accent2);
+      }
+
       *,
       *::before,
       *::after {
@@ -663,9 +706,10 @@
       <header class="app-header">
         <div class="app-brand">
           <span class="logo-a">AMSTERDAM</span
-          ><span class="logo-text"> TECH</span>
+          ><span class="logo-text">TECH</span>
         </div>
         <div class="header-right">
+          <button class="theme-toggle" id="theme-toggle">☀️ Light</button>
           <div class="connection-status">
             <span class="status-dot" id="status-dot"></span>
             <span id="status-text">Disconnected</span>
@@ -681,7 +725,7 @@
             <video id="anam-video" autoplay playsinline></video>
             <div class="avatar-placeholder" id="avatar-placeholder">
               <div class="avatar-icon">🤖</div>
-              <span style="font-size: 13px">AI Mentor</span>
+              <span style="font-size: 13px">Pablo — AI Mentor</span>
             </div>
           </div>
 
@@ -717,7 +761,7 @@
                 type="text"
                 class="chat-input"
                 id="message-input"
-                placeholder="Type a message to Mentor…"
+                placeholder="Type a message to the Mentor…"
                 disabled
               />
               <button class="send-btn" id="send-btn" disabled>Send</button>
