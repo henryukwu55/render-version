@@ -78,7 +78,8 @@ router.all("/token", async (req, res) => {
 
   // If reconnecting, inject conversation history into the system prompt
   const history = req.body?.conversationHistory || [];
-  let systemPrompt = PERSONA_CONFIG.systemPrompt;
+  // let systemPrompt = PERSONA_CONFIG.systemPrompt;
+  let basePrompt = PERSONA_CONFIG.systemPrompt;
 
   if (KNOWLEDGE_BASE && KNOWLEDGE_BASE.trim()) {
     const knowledgeSection =
