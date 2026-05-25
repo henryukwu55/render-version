@@ -60,7 +60,8 @@ RESOURCE GUIDELINES:
 
 
 
-Remember: Any code you write must be inside triple backtick fences. This is mandatory.`,
+Remember: Any code you write must be inside triple backtick fences. This is mandatory.
+\${KNOWLEDGE_PLACEHOLDER}`,
   voiceDetectionOptions: {
     endOfSpeechSensitivity: 0.5,
     silenceBeforeSkipTurnSeconds: 20, // wait 20s of silence before Pablo speaks unprompted
