@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Mentor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 20px;
+    }
+
+    /* ── Code Entry ─────────────────────────────────────── */
+    .gate {
+      background: #fff;
+      border-radius: 16px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+      max-width: 420px;
+      width: 100%;
+      text-align: center;
+    }
+    .gate-icon { font-size: 48px; margin-bottom: 12px; }
+    .gate h1 { font-size: 24px; font-weight: 700; color: #1a1a2e; margin-bottom: 6px; }
+    .gate p { color: #666; font-size: 14px; margin-bottom: 28px; line-height: 1.6; }
+
+    .code-input {
+      width: 100%;
+      padding: 14px 18px;
+      font-family: 'DM Sans', monospace;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-align: center;
+      text-transform: uppercase;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      outline: none;
+      transition: border-color 0.2s;
+      margin-bottom: 14px;
+    }
+    .code-input:focus { border-color: #667eea; }
+
+    .submit-btn {
+      width: 100%;
+      padding: 13px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .submit-btn:hover { opacity: 0.88; }
+    .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .error-msg {
+      color: #e05252;
+      font-size: 13px;
+      margin-top: 10px;
+      min-height: 20px;
+    }
+
+    /* ── Widget View ─────────────────────────────────────── */
+    .widget-view {
+      background: #fff;
+      border-radius: 16px;
+      padding: 32px 40px 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+      max-width: 680px;
+      width: 100%;
+      text-align: center;
+    }
+    .widget-header { margin-bottom: 24px; }
+    .widget-header h1 { font-size: 22px; font-weight: 700; color: #1a1a2e; margin-bottom: 4px; }
+    .widget-header p { color: #666; font-size: 13px; }
+
+    .timer-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #f5f0ff;
+      border: 1px solid #d6c8ff;
+      border-radius: 8px;
+      padding: 8px 16px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      color: #5c3fc4;
+    }
+    .timer-val {
+      font-weight: 700;
+      font-size: 16px;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 1px;
+    }
+    .timer-val.urgent { color: #e05252; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+    anam-agent {
+      display: block;
+      width: 100%;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .end-btn {
+      margin-top: 18px;
+      background: none;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      color: #999;
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 12px;
+      padding: 6px 18px;
+      transition: all 0.15s;
+    }
+    .end-btn:hover { border-color: #e05252; color: #e05252; }
+
+    /* ── Expired overlay ─────────────────────────────────── */
+    .expired-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 999;
+    }
+    .expired-card {
+      background: #fff; border-radius: 16px;
+      padding: 40px; text-align: center; max-width: 340px;
+    }
+    .expired-card h2 { font-size: 20px; margin-bottom: 8px; color: #1a1a2e; }
+    .expired-card p { color: #666; font-size: 13px; margin-bottom: 20px; }
+    .expired-card button {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border: none; border-radius: 8px; color: #fff;
+      cursor: pointer; font-family: 'DM Sans', sans-serif;
+      font-size: 14px; font-weight: 600; padding: 10px 28px;
+    }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <!-- ── CODE ENTRY GATE ─────────────────────────────────── -->
+  <div class="gate" id="gate">
+    <div class="gate-icon">🤖</div>
+    <h1>AI Mentor</h1>
+    <p>Stuck or missed a live session? Enter your access code to speak with the virtual mentor.</p>
+    <input
+      type="text"
+      class="code-input"
+      id="code-input"
+      placeholder="AT-XXXXX"
+      maxlength="8"
+      autocomplete="off"
+      spellcheck="false"
+    />
+    <button class="submit-btn" id="submit-btn">Start Session</button>
+    <p class="error-msg" id="error-msg"></p>
+  </div>
+
+  <!-- ── WIDGET VIEW ─────────────────────────────────────── -->
+  <div class="widget-view hidden" id="widget-view">
+    <div class="widget-header">
+      <h1>🤖 AI Mentor</h1>
+      <p>24/7 Learning Support — speak or type your question below</p>
+    </div>
+
+    <div class="timer-bar">
+      <span>Session time remaining</span>
+      <span class="timer-val" id="timer">00:00</span>
+    </div>
+
+    <anam-agent
+      agent-id="6801808b-6375-49f8-8ae5-13032dad8892"
+      ui-text-input="true"
+    ></anam-agent>
+    <script src="https://unpkg.com/@anam-ai/agent-widget" async></script>
+
+    <button class="end-btn" id="end-btn">End Session</button>
+  </div>
+
+  <!-- ── EXPIRED OVERLAY ────────────────────────────────── -->
+  <div class="expired-overlay hidden" id="expired-overlay">
+    <div class="expired-card">
+      <div style="font-size:48px;margin-bottom:12px">⏱️</div>
+      <h2>Session Expired</h2>
+      <p>Your session time has ended. Request a new access code to continue.</p>
+      <button onclick="location.reload()">Start Over</button>
+    </div>
+  </div>
+
+  <script>
+    // ── State ────────────────────────────────────────────
+    const state = {
+      sessionToken: null,
+      durationSeconds: 0,
+      secondsUsed: 0,
+      timerInterval: null,
+    };
+
+    // ── Code input formatting ────────────────────────────
+    const codeInput  = document.getElementById("code-input");
+    const submitBtn  = document.getElementById("submit-btn");
+    const errorMsg   = document.getElementById("error-msg");
+    const gate       = document.getElementById("gate");
+    const widgetView = document.getElementById("widget-view");
+    const timerEl    = document.getElementById("timer");
+    const endBtn     = document.getElementById("end-btn");
+    const expiredOverlay = document.getElementById("expired-overlay");
+
+    codeInput.addEventListener("input", () => {
+      let v = codeInput.value.toUpperCase().replace(/[^A-Z0-9\-]/g, "");
+      if (v.length >= 2 && !v.includes("-")) v = v.slice(0, 2) + "-" + v.slice(2);
+      codeInput.value = v.slice(0, 8);
+    });
+    codeInput.addEventListener("keypress", (e) => { if (e.key === "Enter") validateCode(); });
+    submitBtn.addEventListener("click", validateCode);
+    endBtn.addEventListener("click", () => endSession("manual"));
+
+    // ── Validate code ────────────────────────────────────
+    async function validateCode() {
+      let code = codeInput.value.trim().toUpperCase();
+      errorMsg.textContent = "";
+
+      if (!code || code.length < 7) {
+        errorMsg.textContent = "Please enter a valid code (e.g. AT-X7K9P)";
+        return;
+      }
+      if (!code.startsWith("AT-")) code = "AT-" + code.replace(/^AT-?/i, "");
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Verifying…";
+
+      try {
+        const res  = await fetch("/api/codes/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          errorMsg.textContent = data.error || "Invalid or expired code.";
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Start Session";
+          return;
+        }
+
+        state.sessionToken    = data.session_token;
+        state.durationSeconds = data.duration_seconds;
+
+        gate.classList.add("hidden");
+        widgetView.classList.remove("hidden");
+        startTimer();
+      } catch (err) {
+        errorMsg.textContent = "Network error. Please try again.";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Start Session";
+      }
+    }
+
+    // ── Timer ────────────────────────────────────────────
+    function startTimer() {
+      updateTimer();
+      state.timerInterval = setInterval(() => {
+        state.secondsUsed++;
+        updateTimer();
+        if (state.secondsUsed >= state.durationSeconds) expireSession();
+      }, 1000);
+    }
+
+    function updateTimer() {
+      const remaining = Math.max(0, state.durationSeconds - state.secondsUsed);
+      const m = Math.floor(remaining / 60);
+      const s = remaining % 60;
+      timerEl.textContent = `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+      timerEl.classList.toggle("urgent", remaining < 60);
+    }
+
+    // ── Session end ──────────────────────────────────────
+    async function expireSession() {
+      clearInterval(state.timerInterval);
+      await trackEnd("expired");
+      expiredOverlay.classList.remove("hidden");
+    }
+
+    async function endSession(reason) {
+      clearInterval(state.timerInterval);
+      await trackEnd(reason);
+      if (reason === "manual") location.reload();
+    }
+
+    async function trackEnd(reason) {
+      if (!state.sessionToken) return;
+      try {
+        await fetch("/api/codes/end-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_token: state.sessionToken,
+            duration_used: state.secondsUsed,
+            ended_reason: reason,
+          }),
+        });
+      } catch(e) {}
+    }
+
+    window.addEventListener("beforeunload", () => trackEnd("closed"));
+  </script>
+</body>
+</html>

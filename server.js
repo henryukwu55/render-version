@@ -47,6 +47,11 @@ app.get("/admin", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin", "index.html"));
 });
 
+// Widget embed page — same access code gate, Anam widget UI
+app.get("/widget", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "user", "widget.html"));
+});
+
 // ── Error Handling ───────────────────────────────────────────────
 app.use("/api/*", (req, res) => {
   res.status(404).json({ error: "API endpoint not found", path: req.url });
