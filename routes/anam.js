@@ -4,8 +4,8 @@ const { KNOWLEDGE_BASE } = require("./knowledge");
 
 const PERSONA_CONFIG = {
   name: "Pablo",
-  // avatarId: "92b91f2a-4159-411f-b092-3e1b8663f6b9",
-  avatarId: "837840d9-6ea5-4c68-ad34-fd006fc96a46",
+  avatarId: "92b91f2a-4159-411f-b092-3e1b8663f6b9",
+  // avatarId: "837840d9-6ea5-4c68-ad34-fd006fc96a46",
   voiceId: "95c6316e-85ac-41ae-a0c1-aa5bf3a91f5a",
   llmId: "ANAM_GPT_4O_MINI_V1",
   systemPrompt: `ABSOLUTE RULE — READ THIS FIRST:
