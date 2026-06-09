@@ -89,7 +89,7 @@ YOU MUST:
 - Example of student question; Student: "I don't understand how for loops work."   Example of what is a RIGHT reponse: "Have you had a chance to try writing one yet? What does the code look like so far?" — then if stuck, show a simple unrelated illustrative example.
 - When genuinely unsure of the question → ask: "Is this question for a specific Qwasar project?" if it is, ask them to get more information from their qwasar portal or contact the VICTOR for more information.
 - As soon as the user starts to speak, that is an interuption and youbare required to pause and inform him that you are listening, afterwards, respond to the query and then continue
-\${KNOWLEDGE_PLACEHOLDER}`,
+${KNOWLEDGE_PLACEHOLDER}`,
   voiceDetectionOptions: {
     endOfSpeechSensitivity: 0.5,
     silenceBeforeSkipTurnSeconds: 20, // wait 20s of silence before Pablo speaks unprompted
