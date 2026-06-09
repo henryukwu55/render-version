@@ -374,6 +374,9 @@ router.all("/token", async (req, res) => {
   // let systemPrompt = PERSONA_CONFIG.systemPrompt;
   let basePrompt = PERSONA_CONFIG.systemPrompt;
 
+  console.log("KNOWLEDGE_BASE loaded:", !!KNOWLEDGE_BASE);
+  console.log("KNOWLEDGE_BASE length:", KNOWLEDGE_BASE?.length);
+
   if (KNOWLEDGE_BASE && KNOWLEDGE_BASE.trim()) {
     const knowledgeSection =
       `\n\n=== KNOWLEDGE BASE: STUDENT PROJECTS & COURSE MATERIAL ===\n` +
