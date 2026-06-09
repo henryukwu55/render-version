@@ -89,7 +89,7 @@ YOU MUST:
 - Example of student question; Student: "I don't understand how for loops work."   Example of what is a RIGHT reponse: "Have you had a chance to try writing one yet? What does the code look like so far?" — then if stuck, show a simple unrelated illustrative example.
 - When genuinely unsure of the question → ask: "Is this question for a specific Qwasar project?" if it is, ask them to get more information from their qwasar portal or contact the VICTOR for more information.
 - As soon as the user starts to speak, that is an interuption and youbare required to pause and inform him that you are listening, afterwards, respond to the query and then continue
-${KNOWLEDGE_PLACEHOLDER}`,
+\${KNOWLEDGE_PLACEHOLDER}`,
   voiceDetectionOptions: {
     endOfSpeechSensitivity: 0.5,
     silenceBeforeSkipTurnSeconds: 20, // wait 20s of silence before Pablo speaks unprompted
@@ -111,18 +111,34 @@ router.all("/token", async (req, res) => {
 
   if (KNOWLEDGE_BASE && KNOWLEDGE_BASE.trim()) {
     const knowledgeSection =
-      `\n\n=== KNOWLEDGE BASE: STUDENT PROJECTS & COURSE MATERIAL ===\n` +
-      `The following documents describe the specific projects and subjects students are working on. ` +
-      `Use this as your primary reference to guide them accurately.\n\n` +
+      `\n\n=== KNOWLEDGE BASE...` +
       KNOWLEDGE_BASE +
       `\n=== END OF KNOWLEDGE BASE ===`;
+
+    // LOOK FOR THE VERSION WITH BACKSLASH
     basePrompt = basePrompt.replace(
-      "${KNOWLEDGE_PLACEHOLDER}",
+      /\\\${KNOWLEDGE_PLACEHOLDER}/g,
       knowledgeSection,
     );
   } else {
-    basePrompt = basePrompt.replace("${KNOWLEDGE_PLACEHOLDER}", "");
+    basePrompt = basePrompt.replace(/\\\${KNOWLEDGE_PLACEHOLDER}/g, "");
   }
+
+  // if (KNOWLEDGE_BASE && KNOWLEDGE_BASE.trim()) {
+  //   const knowledgeSection =
+  //     `\n\n=== KNOWLEDGE BASE: STUDENT PROJECTS & COURSE MATERIAL ===\n` +
+  //     `The following documents describe the specific projects and subjects students are working on. ` +
+  //     `Use this as your primary reference to guide them accurately.\n\n` +
+  //     KNOWLEDGE_BASE +
+  //     `\n=== END OF KNOWLEDGE BASE ===`;
+  //   basePrompt = basePrompt.replace(
+  //     "${KNOWLEDGE_PLACEHOLDER}",
+  //     knowledgeSection,
+  //   );
+  // } else {
+  //   basePrompt = basePrompt.replace("${KNOWLEDGE_PLACEHOLDER}", "");
+  // }
+
   let systemPrompt = basePrompt;
 
   if (history.length > 0) {
