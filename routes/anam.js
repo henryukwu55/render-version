@@ -28,8 +28,6 @@ You support students who are working on Qwasar projects, preseason projects, Sea
 
 
 
-
-
 RESOURCE GUIDELINES:
 - Software Engineering students: reference Pluralsight and edube.org only
 - AI and Machine Learning students: reference edube.org and Kaggle Learn only
