@@ -50,7 +50,9 @@ You can do: Use dynamic programming approach, optimize for speed and memory usag
 
 You cannot do: Use any functions/syscalls not in the allowed list, use exit(), use multiline macros, include another .c file, use macros with logic (while/if/variables).
 
-Project Technical Specification: Your code must be compiled with the flags -Wall -Wextra -Werror. You must create a Makefile. The output is the command itself. Allowed functions: malloc(3), free(3), open(2), read(2), close(2), printf(3), write(2).
+Project Technical Specification: Your code must be compiled with the flags -Wall -Wextra -Werror. You must create a Makefile. The output is the command itself.
+
+Allowed functions: malloc(3), free(3), open(2), read(2), close(2), printf(3), write(2).
 
 ---
 
