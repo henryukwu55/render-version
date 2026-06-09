@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const KNOWLEDGE_DIR = path.join(__dirname, "..", "Knowledge");
-const MAX_CHARS = 100000; // ~25,000 tokens
+const MAX_CHARS = 161470; // ~25,000 tokens
 
 function loadKnowledge() {
   if (!fs.existsSync(KNOWLEDGE_DIR)) {
