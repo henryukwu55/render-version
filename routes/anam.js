@@ -89,7 +89,7 @@ YOU MUST:
 - Example of student question; Student: "I don't understand how for loops work."   Example of what is a RIGHT reponse: "Have you had a chance to try writing one yet? What does the code look like so far?" — then if stuck, show a simple unrelated illustrative example.
 - When genuinely unsure of the question → ask: "Is this question for a specific Qwasar project?" if it is, ask them to get more information from their qwasar portal or contact the VICTOR for more information.
 - As soon as the user starts to speak, that is an interuption and youbare required to pause and inform him that you are listening, afterwards, respond to the query and then continue
-\${KNOWLEDGE_PLACEHOLDER}`,
+[KNOWLEDGE_PLACEHOLDER]`,
   voiceDetectionOptions: {
     endOfSpeechSensitivity: 0.5,
     silenceBeforeSkipTurnSeconds: 20, // wait 20s of silence before Pablo speaks unprompted
@@ -99,126 +99,35 @@ YOU MUST:
   },
 };
 
+// Accept GET (first connect) or POST (reconnect with history)
 router.all("/token", async (req, res) => {
   const apiKey = process.env.ANAM_API_KEY;
   if (!apiKey) return res.json({ session_token: null, demo_mode: true });
 
+  // If reconnecting, inject conversation history into the system prompt
   const history = req.body?.conversationHistory || [];
+  // let systemPrompt = PERSONA_CONFIG.systemPrompt;
   let basePrompt = PERSONA_CONFIG.systemPrompt;
 
-  // DEBUG: Log BEFORE replacement
-  console.log("=== BEFORE REPLACEMENT ===");
-  console.log("Has placeholder:", basePrompt.includes("KNOWLEDGE_PLACEHOLDER"));
-  console.log("First 500 chars:", basePrompt.substring(0, 500));
-
   if (KNOWLEDGE_BASE && KNOWLEDGE_BASE.trim()) {
-    console.log("KNOWLEDGE_BASE exists, length:", KNOWLEDGE_BASE.length);
-
     const knowledgeSection =
       `\n\n=== KNOWLEDGE BASE: STUDENT PROJECTS & COURSE MATERIAL ===\n` +
       `The following documents describe the specific projects and subjects students are working on. ` +
       `Use this as your primary reference to guide them accurately.\n\n` +
       KNOWLEDGE_BASE +
       `\n=== END OF KNOWLEDGE BASE ===`;
-
-    // Try BOTH patterns to see which works
-    const beforeReplace = basePrompt.length;
-
-    // Try pattern 1: with backslash
-    let newPrompt = basePrompt.replace(
-      /\\\${KNOWLEDGE_PLACEHOLDER}/g,
+    // basePrompt = basePrompt.replace(
+    //   "${KNOWLEDGE_PLACEHOLDER}",
+    //   knowledgeSection,
+    // );
+    basePrompt = basePrompt.replace(
+      /\[KNOWLEDGE_PLACEHOLDER\]/g,
       knowledgeSection,
     );
-
-    // Try pattern 2: without backslash if pattern 1 didn't work
-    if (newPrompt === basePrompt) {
-      console.log(
-        "Pattern with backslash didn't match, trying without backslash...",
-      );
-      newPrompt = basePrompt.replace(
-        /\${KNOWLEDGE_PLACEHOLDER}/g,
-        knowledgeSection,
-      );
-    }
-
-    // Try pattern 3: literal string
-    if (newPrompt === basePrompt) {
-      console.log("Regex patterns didn't match, trying literal string...");
-      newPrompt = basePrompt.replace(
-        "${KNOWLEDGE_PLACEHOLDER}",
-        knowledgeSection,
-      );
-      if (newPrompt === basePrompt) {
-        newPrompt = basePrompt.replace(
-          "\\${KNOWLEDGE_PLACEHOLDER}",
-          knowledgeSection,
-        );
-      }
-    }
-
-    console.log("Replacement worked?", newPrompt !== basePrompt);
-    console.log("New prompt length:", newPrompt.length);
-    console.log("Has knowledge section:", newPrompt.includes("KNOWLEDGE BASE"));
-
-    basePrompt = newPrompt;
   } else {
-    console.log("KNOWLEDGE_BASE is empty or falsy!");
-    basePrompt = basePrompt.replace(/\\?\${KNOWLEDGE_PLACEHOLDER}/g, "");
+    // basePrompt = basePrompt.replace("${KNOWLEDGE_PLACEHOLDER}", "");
+    basePrompt = basePrompt.replace("/\[KNOWLEDGE_PLACEHOLDER]", "");
   }
-
-  console.log("=== AFTER REPLACEMENT ===");
-  console.log("Final prompt length:", basePrompt.length);
-  console.log(
-    "Contains knowledge section:",
-    basePrompt.includes("KNOWLEDGE BASE"),
-  );
-
-  // // Accept GET (first connect) or POST (reconnect with history)
-  // router.all("/token", async (req, res) => {
-  //   const apiKey = process.env.ANAM_API_KEY;
-  //   if (!apiKey) return res.json({ session_token: null, demo_mode: true });
-
-  //   // If reconnecting, inject conversation history into the system prompt
-  //   const history = req.body?.conversationHistory || [];
-  //   // let systemPrompt = PERSONA_CONFIG.systemPrompt;
-  //   let basePrompt = PERSONA_CONFIG.systemPrompt;
-
-  //   if (KNOWLEDGE_BASE && KNOWLEDGE_BASE.trim()) {
-  //     const knowledgeSection =
-  //       `\n\n=== KNOWLEDGE BASE...` +
-  //       KNOWLEDGE_BASE +
-  //       `\n=== END OF KNOWLEDGE BASE ===`;
-
-  //     // LOOK FOR THE VERSION WITH BACKSLASH
-  //     basePrompt = basePrompt.replace(
-  //       /\\\${KNOWLEDGE_PLACEHOLDER}/g,
-  //       knowledgeSection,
-  //     );
-  //   } else {
-  //     basePrompt = basePrompt.replace(/\\\${KNOWLEDGE_PLACEHOLDER}/g, "");
-  //   }
-
-  //   if (KNOWLEDGE_BASE && KNOWLEDGE_BASE.trim()) {
-  //     const knowledgeSection =
-  //       `\n\n=== KNOWLEDGE BASE...` +
-  //       KNOWLEDGE_BASE +
-  //       `\n=== END OF KNOWLEDGE BASE ===`;
-  //     basePrompt = basePrompt.replace(
-  //       "${KNOWLEDGE_PLACEHOLDER}",
-  //       knowledgeSection,
-  //     );
-
-  //     // ADD THIS DEBUG LOG
-  //     console.log(
-  //       "Has placeholder still?",
-  //       basePrompt.includes("${KNOWLEDGE_PLACEHOLDER}"),
-  //     );
-  //     console.log(
-  //       "Has knowledge section?",
-  //       basePrompt.includes("KNOWLEDGE BASE"),
-  //     );
-  //   }
-
   let systemPrompt = basePrompt;
 
   if (history.length > 0) {
