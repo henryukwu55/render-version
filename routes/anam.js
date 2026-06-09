@@ -99,45 +99,125 @@ YOU MUST:
   },
 };
 
-// Accept GET (first connect) or POST (reconnect with history)
 router.all("/token", async (req, res) => {
   const apiKey = process.env.ANAM_API_KEY;
   if (!apiKey) return res.json({ session_token: null, demo_mode: true });
 
-  // If reconnecting, inject conversation history into the system prompt
   const history = req.body?.conversationHistory || [];
-  // let systemPrompt = PERSONA_CONFIG.systemPrompt;
   let basePrompt = PERSONA_CONFIG.systemPrompt;
 
+  // DEBUG: Log BEFORE replacement
+  console.log("=== BEFORE REPLACEMENT ===");
+  console.log("Has placeholder:", basePrompt.includes("KNOWLEDGE_PLACEHOLDER"));
+  console.log("First 500 chars:", basePrompt.substring(0, 500));
+
   if (KNOWLEDGE_BASE && KNOWLEDGE_BASE.trim()) {
+    console.log("KNOWLEDGE_BASE exists, length:", KNOWLEDGE_BASE.length);
+
     const knowledgeSection =
-      `\n\n=== KNOWLEDGE BASE...` +
+      `\n\n=== KNOWLEDGE BASE: STUDENT PROJECTS & COURSE MATERIAL ===\n` +
+      `The following documents describe the specific projects and subjects students are working on. ` +
+      `Use this as your primary reference to guide them accurately.\n\n` +
       KNOWLEDGE_BASE +
       `\n=== END OF KNOWLEDGE BASE ===`;
 
-    // LOOK FOR THE VERSION WITH BACKSLASH
-    basePrompt = basePrompt.replace(
+    // Try BOTH patterns to see which works
+    const beforeReplace = basePrompt.length;
+
+    // Try pattern 1: with backslash
+    let newPrompt = basePrompt.replace(
       /\\\${KNOWLEDGE_PLACEHOLDER}/g,
       knowledgeSection,
     );
+
+    // Try pattern 2: without backslash if pattern 1 didn't work
+    if (newPrompt === basePrompt) {
+      console.log(
+        "Pattern with backslash didn't match, trying without backslash...",
+      );
+      newPrompt = basePrompt.replace(
+        /\${KNOWLEDGE_PLACEHOLDER}/g,
+        knowledgeSection,
+      );
+    }
+
+    // Try pattern 3: literal string
+    if (newPrompt === basePrompt) {
+      console.log("Regex patterns didn't match, trying literal string...");
+      newPrompt = basePrompt.replace(
+        "${KNOWLEDGE_PLACEHOLDER}",
+        knowledgeSection,
+      );
+      if (newPrompt === basePrompt) {
+        newPrompt = basePrompt.replace(
+          "\\${KNOWLEDGE_PLACEHOLDER}",
+          knowledgeSection,
+        );
+      }
+    }
+
+    console.log("Replacement worked?", newPrompt !== basePrompt);
+    console.log("New prompt length:", newPrompt.length);
+    console.log("Has knowledge section:", newPrompt.includes("KNOWLEDGE BASE"));
+
+    basePrompt = newPrompt;
   } else {
-    basePrompt = basePrompt.replace(/\\\${KNOWLEDGE_PLACEHOLDER}/g, "");
+    console.log("KNOWLEDGE_BASE is empty or falsy!");
+    basePrompt = basePrompt.replace(/\\?\${KNOWLEDGE_PLACEHOLDER}/g, "");
   }
 
-  // if (KNOWLEDGE_BASE && KNOWLEDGE_BASE.trim()) {
-  //   const knowledgeSection =
-  //     `\n\n=== KNOWLEDGE BASE: STUDENT PROJECTS & COURSE MATERIAL ===\n` +
-  //     `The following documents describe the specific projects and subjects students are working on. ` +
-  //     `Use this as your primary reference to guide them accurately.\n\n` +
-  //     KNOWLEDGE_BASE +
-  //     `\n=== END OF KNOWLEDGE BASE ===`;
-  //   basePrompt = basePrompt.replace(
-  //     "${KNOWLEDGE_PLACEHOLDER}",
-  //     knowledgeSection,
-  //   );
-  // } else {
-  //   basePrompt = basePrompt.replace("${KNOWLEDGE_PLACEHOLDER}", "");
-  // }
+  console.log("=== AFTER REPLACEMENT ===");
+  console.log("Final prompt length:", basePrompt.length);
+  console.log(
+    "Contains knowledge section:",
+    basePrompt.includes("KNOWLEDGE BASE"),
+  );
+
+  // // Accept GET (first connect) or POST (reconnect with history)
+  // router.all("/token", async (req, res) => {
+  //   const apiKey = process.env.ANAM_API_KEY;
+  //   if (!apiKey) return res.json({ session_token: null, demo_mode: true });
+
+  //   // If reconnecting, inject conversation history into the system prompt
+  //   const history = req.body?.conversationHistory || [];
+  //   // let systemPrompt = PERSONA_CONFIG.systemPrompt;
+  //   let basePrompt = PERSONA_CONFIG.systemPrompt;
+
+  //   if (KNOWLEDGE_BASE && KNOWLEDGE_BASE.trim()) {
+  //     const knowledgeSection =
+  //       `\n\n=== KNOWLEDGE BASE...` +
+  //       KNOWLEDGE_BASE +
+  //       `\n=== END OF KNOWLEDGE BASE ===`;
+
+  //     // LOOK FOR THE VERSION WITH BACKSLASH
+  //     basePrompt = basePrompt.replace(
+  //       /\\\${KNOWLEDGE_PLACEHOLDER}/g,
+  //       knowledgeSection,
+  //     );
+  //   } else {
+  //     basePrompt = basePrompt.replace(/\\\${KNOWLEDGE_PLACEHOLDER}/g, "");
+  //   }
+
+  //   if (KNOWLEDGE_BASE && KNOWLEDGE_BASE.trim()) {
+  //     const knowledgeSection =
+  //       `\n\n=== KNOWLEDGE BASE...` +
+  //       KNOWLEDGE_BASE +
+  //       `\n=== END OF KNOWLEDGE BASE ===`;
+  //     basePrompt = basePrompt.replace(
+  //       "${KNOWLEDGE_PLACEHOLDER}",
+  //       knowledgeSection,
+  //     );
+
+  //     // ADD THIS DEBUG LOG
+  //     console.log(
+  //       "Has placeholder still?",
+  //       basePrompt.includes("${KNOWLEDGE_PLACEHOLDER}"),
+  //     );
+  //     console.log(
+  //       "Has knowledge section?",
+  //       basePrompt.includes("KNOWLEDGE BASE"),
+  //     );
+  //   }
 
   let systemPrompt = basePrompt;
 
