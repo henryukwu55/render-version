@@ -8,37 +8,31 @@ Season02 SE
 
 Season 02 SE Project 1:
 
-My Bsq
+project name - My Bsq
 
+My Bsq insructions -
 Remember to git add && git commit && git push each exercise!
-
 We will execute your function with our test(s), please DO NOT PROVIDE ANY TEST(S) in your file
-
 For each exercise, you will have to create a folder and in this folder, you will have additional files that contain your work. Folder names are provided at the beginning of each exercise under submit directory and specific file names for each exercise are also provided at the beginning of each exercise under submit file(s).
 
-My Bsq
+My Bsq project content -
 Submit directory .
 Submit files Makefile - _.c - _.h
-Description
-Command Name
-Write a programm called my_bsq. Following the specifications of this man page.
 
-Description
+Description of my bsq project -
+Write a programm called my_bsq. Following the specifications of this man page.
 my_bsq -- finds and prints the biggest square in a map
 
-SYNOPSIS
+SYNOPSIS of my bsq project -
 my_bsq [file.txt]
 
-DESCRIPTION
+MORE DESCRIPTION of my bsq project -
 This is an algorithm project!! Make it fast or low memory usage or both!
-
-You must find the largest possible square on a board while avoiding obstacles. The board is represented by a file passed as the program’s argument, respecting those constraints:
-
+You must find the largest possible square on a board while avoiding obstacles. The board is represented by a file passed as the program’s argument, respecting those constraints -
 • Its first line contains the number of lines on the board (and only that), • . (representing an empty place) and "o" (representing an obstacle) are the only two allowed characters for the other lines • All of the lines will be the same length (except the first one) • There will always be at least one line • Each line is terminated by \n.
-
 You program must print the board, with some "." replaced by "x" to represent the largest square you found.
 
-Example 00
+Example 00 of my bsq project -
 input:
 
 5
@@ -54,7 +48,8 @@ output:
 ..xx.
 .o...
 o...o
-Example 01
+
+Example 01 of my bsq project -
 $>./my_bsq map10x10
 ..xx.
 .oxxo
@@ -62,32 +57,39 @@ $>./my_bsq map10x10
 .o...
 o...o
 $>
-Requirements
+
+Requirements of my bsq project -
 Your code must be compiled with the flags -Wall -Wextra -Werror.
-Hint(s)
+
+Hint(s) for solving my bsq project -
 Watch out for memory leaks !
 You can test your code against memory errors by compiling with the debugging flags -g3 -fsanitize=address
-Technical specification
-you must create a Makefile, and the ouput is the command itself
-You can use:
-malloc(3)
-free(3)
-open(2)
-read(2)
-close(2)
-printf(3)
-write(2)
-You can NOT use:
-Any functions / syscalls which does not appear in the previous list
-Yes, it includes exit
-Multiline macros are forbidden
-Include another .c is forbidden
-Macros with logic (while/if/variables/...) are forbidden
-We are looking for speed, memory optimisation and code architecture. Dynamic programming OOP in C?
 
+Technical specification for my bsq project -
+you must create a Makefile, and the ouput is the command itself
+
+You are allowed to use only these functions in the my bsq project -
+
+- malloc(3)
+- free(3)
+- open(2)
+- read(2)
+- close(2)
+- printf(3)
+- write(2)
+
+You are not allowed to use only these functions in the my bsq project -
+
+- Any functions / syscalls which does not appear in the previous list
+- Yes, it includes exit
+- Multiline macros are forbidden
+- Include another .c is forbidden
+- Macros with logic (while/if/variables/...) are forbidden
+
+We are looking for speed, memory optimisation and code architecture. Dynamic programming OOP in C?
 You should try with differents size of map 10x10... 100x100? :-)
 
-To generate map you can use this perl script:
+To generate map you can use this perl script -
 
 #!/usr/bin/perl -w
 
@@ -413,7 +415,7 @@ $>./my_mouse 01.map
 
 $>cat -e 02.map
 10x10* o12$
-**1**\*****$
+**1**\*\*\*\*\*$
 
 -      * *$
 - - \*\*\*$
@@ -426,7 +428,7 @@ $>cat -e 02.map
 ****2*****$
   $>./my_mouse 02.map
   10x10\* o12
-  **1**\*****
+  **1**\*\*\*\*\*
 - o \* \*
 - o\* \*\*\*
 - oo \* \*
