@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { KNOWLEDGE_BASE } = require("./Knowledge");
+const { KNOWLEDGE_BASE } = require("./knowledge");
 
 const PERSONA_CONFIG = {
   name: "Pablo",
