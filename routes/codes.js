@@ -116,10 +116,10 @@ router.post("/end-session", async (req, res) => {
 router.post("/generate", async (req, res) => {
   const { duration_seconds } = req.body;
 
-  if (!duration_seconds || duration_seconds < 10 || duration_seconds > 86400) {
+  if (!duration_seconds || duration_seconds < 10 || duration_seconds > 259200) {
     return res
       .status(400)
-      .json({ error: "Invalid duration (10-86400 seconds)" });
+      .json({ error: "Invalid duration (10-259200 seconds)" });
   }
 
   try {
@@ -141,9 +141,12 @@ router.post("/generate", async (req, res) => {
     if (!isUnique)
       return res.status(500).json({ error: "Failed to generate unique code" });
 
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 24);
+    // const expiresAt = new Date();
+    // expiresAt.setHours(expiresAt.getHours() + 24);
 
+    const expiresAt = new Date(Date.now() + duration_seconds * 1000);
+
+    // ensures tthe code expires exactly after the requested duration
     const result = await query(
       `INSERT INTO access_codes (code, duration_seconds, created_by, expires_at)
        VALUES ($1, $2, $3, $4) RETURNING id, code, duration_seconds`,
