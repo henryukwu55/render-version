@@ -174,8 +174,7 @@ router.get("/", async (req, res) => {
   try {
     const result = await query(`
       SELECT c.*, COUNT(us.id) as session_count
-      FROM access_codes c
-      LEFT JOIN user_sessions us ON c.id = us.access_code_id
+      FROM access_codes c=0uu0     LEFT JOIN user_sessions us ON c.id = us.access_code_id
       GROUP BY c.id
       ORDER BY c.created_at DESC
       LIMIT 100
