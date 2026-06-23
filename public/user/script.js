@@ -196,12 +196,26 @@ async function connect() {
       (e) => e.final && e.text.trim(),
     );
     state.isReconnecting = history.length > 0;
+    
+
+    // ── NEW: Get speech pace from localStorage ──────────────────
+    const savedPace = localStorage.getItem("pablo_speech_pace") || "normal";
+    const speechPace = ["slow", "normal", "fast"].includes(savedPace) 
+      ? savedPace 
+      : "normal";
 
     const tokenRes = await fetch("/api/anam/token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversationHistory: history }),
+      body: JSON.stringify({ 
+        conversationHistory: history,
+        speechPace: speechPace  // ← Added this
+      }),
     });
+
+
+
+    
     const tokenData = await tokenRes.json();
     if (tokenData.demo_mode || !tokenData.session_token) {
       addSystemNote("⚠️ ANAM_API_KEY not configured on server.");
