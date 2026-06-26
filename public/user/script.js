@@ -196,26 +196,22 @@ async function connect() {
       (e) => e.final && e.text.trim(),
     );
     state.isReconnecting = history.length > 0;
-    
 
     // ── NEW: Get speech pace from localStorage ──────────────────
     const savedPace = localStorage.getItem("pablo_speech_pace") || "normal";
-    const speechPace = ["slow", "normal", "fast"].includes(savedPace) 
-      ? savedPace 
+    const speechPace = ["slow", "normal", "fast"].includes(savedPace)
+      ? savedPace
       : "normal";
 
     const tokenRes = await fetch("/api/anam/token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         conversationHistory: history,
-        speechPace: speechPace  // ← Added this
+        speechPace: speechPace, // ← Added this
       }),
     });
 
-
-
-    
     const tokenData = await tokenRes.json();
     if (tokenData.demo_mode || !tokenData.session_token) {
       addSystemNote("⚠️ ANAM_API_KEY not configured on server.");
@@ -555,17 +551,95 @@ function parseSegments(raw) {
   return segments;
 }
 
+// Detect bullet markers (•, -, *) or numbered list markers (1., 2.) at the
+// start of a line. Used to decide whether a paragraph should render as
+// a <ul>/<ol> instead of plain prose.
+const BULLET_LINE_RE = /^\s*([•\-\*]|\d+[.)])\s+(.*)$/;
+
+// Split raw text into paragraph-like blocks: a "list" block is one or more
+// consecutive bullet/numbered lines; a "prose" block is everything else,
+// split on blank lines so distinct paragraphs don't get glued together.
+function splitIntoBlocks(text) {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const blocks = [];
+  let currentList = null;
+  let currentProse = [];
+
+  const flushProse = () => {
+    const joined = currentProse.join(" ").trim();
+    if (joined) blocks.push({ kind: "prose", text: joined });
+    currentProse = [];
+  };
+  const flushList = () => {
+    if (currentList && currentList.items.length) blocks.push(currentList);
+    currentList = null;
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    const bulletMatch = line.match(BULLET_LINE_RE);
+
+    if (bulletMatch) {
+      flushProse();
+      const marker = bulletMatch[1];
+      const isOrdered = /^\d/.test(marker);
+      if (!currentList || currentList.ordered !== isOrdered) {
+        flushList();
+        currentList = { kind: "list", ordered: isOrdered, items: [] };
+      }
+      currentList.items.push(bulletMatch[2].trim());
+      continue;
+    }
+
+    if (!line) {
+      // Blank line — ends whatever block is open
+      flushList();
+      flushProse();
+      continue;
+    }
+
+    // Plain prose line — close any open list, accumulate into prose
+    flushList();
+    currentProse.push(line);
+  }
+  flushList();
+  flushProse();
+  return blocks;
+}
+
+// Render a block of text (prose + lists) into a parent element with
+// real DOM structure so bullets, numbered steps, and paragraph breaks
+// are visually distinct instead of collapsing into one line.
+function renderTextBlock(parent, text) {
+  const txt = text.trim();
+  if (!txt) return;
+  const blocks = splitIntoBlocks(txt);
+
+  blocks.forEach((block) => {
+    if (block.kind === "list") {
+      const listEl = document.createElement(block.ordered ? "ol" : "ul");
+      listEl.className = "tx-list";
+      block.items.forEach((item) => {
+        const li = document.createElement("li");
+        li.textContent = item;
+        listEl.appendChild(li);
+      });
+      parent.appendChild(listEl);
+    } else {
+      const p = document.createElement("p");
+      p.className = "tx-bubble-text";
+      p.textContent = block.text;
+      parent.appendChild(p);
+    }
+  });
+}
+
 // Render finalised segments with syntax highlighting
 function renderSegments(parent, segments) {
   parent.innerHTML = "";
   segments.forEach((seg) => {
     if (seg.type === "text") {
-      const txt = seg.content.trim();
-      if (!txt) return;
-      const span = document.createElement("span");
-      span.className = "tx-bubble-text";
-      span.textContent = "“" + txt + "”";
-      parent.appendChild(span);
+      renderTextBlock(parent, seg.content);
     } else {
       const wrap = document.createElement("div");
       wrap.className = "tx-code-wrap";
@@ -601,7 +675,12 @@ function renderSegments(parent, segments) {
   });
 }
 
-// APPEND incremental fragments — live code preview while fence is open
+// APPEND incremental fragments — live code preview while fence is open.
+// Re-rendering is throttled to one paint per animation frame instead of
+// once per fragment: rebuilding the whole bubble (innerHTML = "") on every
+// single word can outpace the browser's paint cycle on longer responses,
+// which is what caused visible "skipping" — some intermediate renders were
+// simply never painted before being replaced by the next one.
 function appendToCaraStream(fragment) {
   if (!fragment) return;
   if (!state.caraStreamBubble) {
@@ -631,24 +710,44 @@ function appendToCaraStream(fragment) {
     wrap.appendChild(document.createTextNode(" "));
     wrap.appendChild(ts);
     transcriptEl.appendChild(wrap);
-    state.caraStreamBubble = { wrap, contentEl, cursor };
+    state.caraStreamBubble = {
+      wrap,
+      contentEl,
+      cursor,
+      renderScheduled: false,
+    };
     state.caraStreamText = "";
   }
 
   state.caraStreamText += fragment;
-  const { contentEl } = state.caraStreamBubble;
-  const openFences = (state.caraStreamText.match(/```/g) || []).length;
+
+  // Schedule a single render for the next animation frame. If multiple
+  // fragments arrive before that frame fires, they all get folded into
+  // the same render — nothing is skipped, it's just batched.
+  const bubble = state.caraStreamBubble;
+  if (!bubble.renderScheduled) {
+    bubble.renderScheduled = true;
+    requestAnimationFrame(() => {
+      renderStreamingContent(bubble.contentEl, state.caraStreamText);
+      bubble.renderScheduled = false;
+      scrollTranscript();
+    });
+  }
+}
+
+// Renders the live (in-progress) streaming text into contentEl.
+// Pulled out of appendToCaraStream so it can be called once per frame
+// regardless of how many fragments arrived in that frame.
+function renderStreamingContent(contentEl, fullText) {
+  const openFences = (fullText.match(/```/g) || []).length;
 
   if (openFences % 2 === 1) {
     // Inside an open code fence — show live code preview
     contentEl.innerHTML = "";
-    const fenceStart = state.caraStreamText.lastIndexOf("```");
-    const beforeCode = state.caraStreamText.slice(0, fenceStart).trim();
+    const fenceStart = fullText.lastIndexOf("```");
+    const beforeCode = fullText.slice(0, fenceStart).trim();
     if (beforeCode) {
-      const span = document.createElement("span");
-      span.className = "tx-bubble-text";
-      span.textContent = "“" + beforeCode + "” ";
-      contentEl.appendChild(span);
+      renderTextBlock(contentEl, beforeCode);
     }
     const liveWrap = document.createElement("div");
     liveWrap.className = "tx-code-wrap";
@@ -657,17 +756,14 @@ function appendToCaraStream(fragment) {
     liveHeader.textContent = "writing code…";
     const livePre = document.createElement("div");
     livePre.className = "tx-code-live";
-    livePre.textContent = state.caraStreamText
-      .slice(fenceStart + 3)
-      .replace(/^\w*\n/, "");
+    livePre.textContent = fullText.slice(fenceStart + 3).replace(/^\w*\n/, "");
     liveWrap.appendChild(liveHeader);
     liveWrap.appendChild(livePre);
     contentEl.appendChild(liveWrap);
   } else {
     // All fences closed — render with highlighting
-    renderSegments(contentEl, parseSegments(state.caraStreamText));
+    renderSegments(contentEl, parseSegments(fullText));
   }
-  scrollTranscript();
 }
 
 // Finalise — apply full syntax highlighting, remove cursor
@@ -684,6 +780,11 @@ function finaliseCaraStream(finalText) {
     entry.final = true;
   }
   saveHistory();
+  // Mark as no longer scheduled so any in-flight requestAnimationFrame
+  // callback becomes a no-op against stale state (state.caraStreamBubble
+  // is about to be nulled below, so renderStreamingContent's frame, if it
+  // still fires, simply has nothing to act on).
+  state.caraStreamBubble.renderScheduled = false;
   renderSegments(contentEl, parseSegments(text));
   if (cursor.parentNode) cursor.parentNode.removeChild(cursor);
   state.caraStreamBubble = null;
@@ -821,6 +922,188 @@ window.addEventListener("beforeunload", () => {
 
 init();
 
+// // ── State ────────────────────────────────────────────────────────
+// const state = {
+//   sessionToken: null,
+//   durationSeconds: 0,
+//   secondsUsed: 0,
+//   timerInterval: null,
+//   anamClient: null,
+//   isConnected: false,
+//   isMicOn: false,
+//   accessCode: null,
+//   // Transcript
+//   caraStreamBubble: null,
+//   caraStreamText: "",
+//   conversationLog: [], // also mirrored to sessionStorage for reconnect memory
+//   isReconnecting: false, // true when reconnecting mid-session (not first connect)
+//   // Student activity detection
+//   studentTyping: false,
+//   studentSpeaking: false,
+//   typingTimer: null, // debounce — clears "typing" state after pause
+// };
+
+// // ── DOM ──────────────────────────────────────────────────────────
+// const codeEntryScreen = document.getElementById("code-entry-screen");
+// const appScreen = document.getElementById("app-screen");
+// const codeInput = document.getElementById("access-code-input");
+// const submitCodeBtn = document.getElementById("submit-code-btn");
+// const codeError = document.getElementById("code-error");
+// const connectBtn = document.getElementById("connect-btn");
+// const disconnectBtn = document.getElementById("disconnect-btn");
+// const micBtn = document.getElementById("mic-btn");
+// const sendBtn = document.getElementById("send-btn");
+// const messageInput = document.getElementById("message-input");
+// const transcriptEl = document.getElementById("transcript");
+// const copyBtn = document.getElementById("copy-btn");
+// const statusDot = document.getElementById("status-dot");
+// const statusText = document.getElementById("status-text");
+// const micStatus = document.getElementById("mic-status");
+// const timerDisplay = document.getElementById("timer-display");
+// const endSessionBtn = document.getElementById("end-session-btn");
+// const restartBtn = document.getElementById("restart-btn");
+// const expiredOverlay = document.getElementById("expired-overlay");
+// const anamVideo = document.getElementById("anam-video");
+// const avatarPlaceholder = document.getElementById("avatar-placeholder");
+
+// // ── Init ─────────────────────────────────────────────────────────
+// function init() {
+//   codeInput.addEventListener("input", formatCodeInput);
+//   codeInput.addEventListener("keypress", (e) => {
+//     if (e.key === "Enter") validateCode();
+//   });
+//   submitCodeBtn.addEventListener("click", validateCode);
+//   connectBtn.addEventListener("click", connect);
+//   disconnectBtn.addEventListener("click", disconnect);
+//   micBtn.addEventListener("click", toggleMicrophone);
+//   sendBtn.addEventListener("click", sendTextMessage);
+//   messageInput.addEventListener("keypress", (e) => {
+//     if (e.key === "Enter") sendTextMessage();
+//   });
+//   // Detect typing — pause Pablo's output while student is composing
+//   messageInput.addEventListener("input", onStudentTyping);
+//   messageInput.addEventListener("blur", onStudentStoppedTyping);
+//   endSessionBtn.addEventListener("click", () => endSession("manual"));
+//   restartBtn.addEventListener("click", () => location.reload());
+//   copyBtn.addEventListener("click", copyTranscript);
+
+//   // Theme toggle
+//   const themeToggle = document.getElementById("theme-toggle");
+//   if (themeToggle) {
+//     // Restore saved preference
+//     const saved = localStorage.getItem("pablo_theme");
+//     if (saved === "light") applyTheme("light");
+//     themeToggle.addEventListener("click", () => {
+//       const isLight = document.documentElement.dataset.theme === "light";
+//       applyTheme(isLight ? "dark" : "light");
+//     });
+//   }
+// }
+
+// function applyTheme(mode) {
+//   document.documentElement.dataset.theme = mode;
+//   localStorage.setItem("pablo_theme", mode);
+//   const btn = document.getElementById("theme-toggle");
+//   if (btn) btn.textContent = mode === "light" ? "🌙 Dark" : "☀️ Light";
+// }
+
+// // ── Session memory helpers ───────────────────────────────────────
+// function saveHistory() {
+//   try {
+//     sessionStorage.setItem(
+//       "pablo_history",
+//       JSON.stringify(
+//         state.conversationLog.filter((e) => e.final && e.text.trim()),
+//       ),
+//     );
+//   } catch (e) {}
+// }
+
+// function loadHistory() {
+//   try {
+//     const raw = sessionStorage.getItem("pablo_history");
+//     return raw ? JSON.parse(raw) : [];
+//   } catch (e) {
+//     return [];
+//   }
+// }
+
+// function clearHistory() {
+//   try {
+//     sessionStorage.removeItem("pablo_history");
+//   } catch (e) {}
+// }
+
+// function formatCodeInput() {
+//   let v = codeInput.value.toUpperCase().replace(/[^A-Z0-9\-]/g, "");
+//   if (v.length >= 2 && !v.includes("-")) v = v.slice(0, 2) + "-" + v.slice(2);
+//   codeInput.value = v.slice(0, 8);
+// }
+
+// // ── Validate Code ─────────────────────────────────────────────────
+// async function validateCode() {
+//   let rawCode = codeInput.value.trim();
+//   codeError.textContent = "";
+//   if (!rawCode || rawCode.length < 7) {
+//     codeError.textContent = "Please enter a valid code (e.g. AT-X7K9P)";
+//     return;
+//   }
+//   let cleanCode = rawCode.toUpperCase();
+//   if (!cleanCode.startsWith("AT-"))
+//     cleanCode = "AT-" + cleanCode.replace(/^AT-?/i, "");
+
+//   submitCodeBtn.disabled = true;
+//   submitCodeBtn.textContent = "Verifying…";
+//   try {
+//     const res = await fetch("/api/codes/validate", {
+//       method: "POST",
+//       headers: { "Content-Type": "application/json" },
+//       body: JSON.stringify({ code: cleanCode }),
+//     });
+//     const data = await res.json();
+//     if (!res.ok) {
+//       codeError.textContent = data.error || "Invalid or expired code.";
+//       submitCodeBtn.disabled = false;
+//       submitCodeBtn.textContent = "Start Session";
+//       return;
+//     }
+//     state.sessionToken = data.session_token;
+//     state.durationSeconds = data.duration_seconds;
+//     state.accessCode = cleanCode;
+//     codeEntryScreen.classList.add("hidden");
+//     appScreen.classList.remove("hidden");
+//     // Load any history saved from a previous connection in this session
+//     state.conversationLog = loadHistory();
+//     startTimer();
+//     addSystemNote(
+//       `Session started — ${formatDuration(state.durationSeconds)} available. Click "Connect to Mentor" to begin.`,
+//     );
+//   } catch (err) {
+//     codeError.textContent = "Network error. Please try again.";
+//     submitCodeBtn.disabled = false;
+//     submitCodeBtn.textContent = "Start Session";
+//   }
+// }
+
+// // ── Timer ─────────────────────────────────────────────────────────
+// function startTimer() {
+//   updateTimerDisplay();
+//   state.timerInterval = setInterval(() => {
+//     state.secondsUsed++;
+//     updateTimerDisplay();
+//     if (state.secondsUsed >= state.durationSeconds) expireSession();
+//   }, 1000);
+// }
+
+// function updateTimerDisplay() {
+//   const remaining = Math.max(0, state.durationSeconds - state.secondsUsed);
+//   const mins = Math.floor(remaining / 60);
+//   const secs = remaining % 60;
+//   timerDisplay.textContent = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+//   timerDisplay.classList.toggle("urgent", remaining < 60);
+//   if (remaining === 10) addSystemNote("⚠️ 10 seconds remaining");
+// }
+
 // // ── Connect ───────────────────────────────────────────────────────
 // async function connect() {
 //   if (!state.sessionToken) {
@@ -838,11 +1121,21 @@ init();
 //     );
 //     state.isReconnecting = history.length > 0;
 
+//     // ── NEW: Get speech pace from localStorage ──────────────────
+//     const savedPace = localStorage.getItem("pablo_speech_pace") || "normal";
+//     const speechPace = ["slow", "normal", "fast"].includes(savedPace)
+//       ? savedPace
+//       : "normal";
+
 //     const tokenRes = await fetch("/api/anam/token", {
 //       method: "POST",
 //       headers: { "Content-Type": "application/json" },
-//       body: JSON.stringify({ conversationHistory: history }),
+//       body: JSON.stringify({
+//         conversationHistory: history,
+//         speechPace: speechPace  // ← Added this
+//       }),
 //     });
+
 //     const tokenData = await tokenRes.json();
 //     if (tokenData.demo_mode || !tokenData.session_token) {
 //       addSystemNote("⚠️ ANAM_API_KEY not configured on server.");
@@ -924,7 +1217,7 @@ init();
 //     // role = "persona" while Cara speaks; role = "user" when user turn finalises.
 //     state.anamClient.addListener("MESSAGE_STREAM_EVENT_RECEIVED", (event) => {
 //       if (event.role === "persona") {
-//         // Append new word fragment to the live Cara bubble
+//         // Append new word fragment to the live Pablo bubble
 //         appendToCaraStream(event.content);
 //       } else if (event.role === "user") {
 //         // User's recognised speech — show as a user bubble
@@ -934,7 +1227,7 @@ init();
 //     });
 
 //     // MESSAGE_HISTORY_UPDATED fires after each full turn.
-//     // Use it to correct/finalise Cara's bubble with the clean final text.
+//     // Use it to correct/finalise Pablo's bubble with the clean final text.
 //     state.anamClient.addListener("MESSAGE_HISTORY_UPDATED", (messages) => {
 //       const lastAssistant = [...messages]
 //         .reverse()
@@ -980,7 +1273,9 @@ init();
 //     setConnectionStatus("connected");
 //     setControlsEnabled(true);
 //     if (state.isReconnecting) {
-//       addSystemNote("↩️ Reconnected — Pablo remembers your conversation.");
+//       addSystemNote(
+//         "↩️ Reconnected — Mentor remembers your conversation and will continue where you left off.",
+//       );
 //     }
 //   } catch (err) {
 //     console.error("Connection error:", err);
@@ -1089,7 +1384,7 @@ init();
 // // ── Microphone toggle ─────────────────────────────────────────────
 // function toggleMicrophone() {
 //   if (!state.isConnected || !state.anamClient) {
-//     addSystemNote("Connect to mentor first.");
+//     addSystemNote("Connect to Mentor first.");
 //     return;
 //   }
 //   if (state.isMicOn) {
@@ -1233,7 +1528,7 @@ init();
 //     const time = timestamp();
 //     state.conversationLog.push({
 //       role: "mentor",
-//       text: "",
+//       text: "Mentor(VA)",
 //       time,
 //       final: false,
 //     });
@@ -1337,7 +1632,7 @@ init();
 //     return;
 //   }
 
-//   const header = `AI mentor — Conversation Transcript\nSession: ${new Date().toLocaleString()}\n${"─".repeat(60)}`;
+//   const header = `AI Mentor — Conversation Transcript\nSession: ${new Date().toLocaleString()}\n${"─".repeat(60)}`;
 //   const full = header + "\n\n" + lines.join("\n\n");
 
 //   navigator.clipboard

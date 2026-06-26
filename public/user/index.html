@@ -428,6 +428,15 @@
         color: var(--success);
       }
 
+      /* Wraps the live-streaming mentor response. Block-level so the
+         paragraphs/lists rendered inside it (tx-bubble-text, tx-list)
+         stack vertically instead of trying to flow inline next to the
+         speaker label. */
+      .tx-stream-content {
+        display: block;
+        margin-top: 0.2rem;
+      }
+
       /* Quoted speech text — inline after the label */
       .tx-bubble {
         display: inline;
@@ -522,6 +531,46 @@
         overflow-x: auto;
         white-space: pre;
         min-height: 2em;
+      }
+
+      /* Each prose paragraph inside a mentor/student turn. display:block
+         (not inline) is what actually lets line breaks between paragraphs
+         show up — this is the fix for responses collapsing into one
+         continuous block of text. */
+      .tx-bubble-text {
+        display: block;
+        margin: 0.35rem 0;
+        color: var(--text);
+        font-size: 14px;
+        line-height: 1.8;
+        white-space: pre-wrap;
+      }
+      .tx-bubble-text:first-child {
+        margin-top: 0;
+      }
+      /* Quote marks around each paragraph, matching the original style */
+      .tx-bubble-text::before {
+        content: "\201c";
+      }
+      .tx-bubble-text::after {
+        content: "\201d";
+      }
+
+      /* Bullet / numbered list rendering for step-by-step instructions */
+      .tx-list {
+        display: block;
+        margin: 0.35rem 0 0.35rem 1.4rem;
+        padding: 0;
+        color: var(--text);
+        font-size: 14px;
+        line-height: 1.7;
+      }
+      .tx-list li {
+        margin: 0.25rem 0;
+        padding-left: 0.2rem;
+      }
+      .tx-list li::marker {
+        color: var(--accent2);
       }
 
       /* Timestamp sits at the end of the line, small and muted */
