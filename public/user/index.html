@@ -622,6 +622,31 @@
         color: var(--accent2);
       }
 
+      /* Soft privacy warning shown briefly when the student pastes text
+         into the message box — non-blocking, auto-dismisses itself. */
+      .paste-warning {
+        background: rgba(251, 191, 36, 0.1);
+        border-top: 1px solid rgba(251, 191, 36, 0.3);
+        color: #b8860b;
+        font-size: 12px;
+        line-height: 1.5;
+        padding: 8px 1.25rem;
+        animation: paste-warning-in 0.2s ease-out;
+      }
+      [data-theme="light"] .paste-warning {
+        color: #92660a;
+      }
+      @keyframes paste-warning-in {
+        from {
+          opacity: 0;
+          transform: translateY(-4px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
       /* Chat input */
       .chat-input-area {
         background: var(--bg2);
@@ -814,6 +839,15 @@
             </div>
           </div>
           <div class="transcript" id="transcript"></div>
+          <div
+            class="paste-warning hidden"
+            id="paste-warning"
+            role="status"
+          >
+            🔒 Heads up: avoid pasting your real name, email, or other
+            personal details — even though nothing here is permanently
+            saved.
+          </div>
           <div class="chat-input-area">
             <div class="chat-input-row">
               <input

@@ -60,6 +60,8 @@ function init() {
   // Detect typing — pause Pablo's output while student is composing
   messageInput.addEventListener("input", onStudentTyping);
   messageInput.addEventListener("blur", onStudentStoppedTyping);
+  // Soft privacy nudge whenever the student pastes text into the box
+  messageInput.addEventListener("paste", onMessageInputPaste);
   endSessionBtn.addEventListener("click", () => endSession("manual"));
   restartBtn.addEventListener("click", () => location.reload());
   copyBtn.addEventListener("click", copyTranscript);
@@ -198,22 +200,34 @@ async function connect() {
       (e) => e.final && e.text.trim(),
     );
     state.isReconnecting = history.length > 0;
+    
 
-    // ── NEW: Get speech pace from localStorage ──────────────────
+    // ── Speech pace from localStorage ──────────────────
     const savedPace = localStorage.getItem("pablo_speech_pace") || "normal";
-    const speechPace = ["slow", "normal", "fast"].includes(savedPace)
-      ? savedPace
+    const speechPace = ["slow", "normal", "fast"].includes(savedPace) 
+      ? savedPace 
       : "normal";
+
+    // ── Student sentiment hint, computed from recent message history ──
+    // Coarse client-side heuristic only — not a clinical or diagnostic
+    // judgement. Gives Pablo a head start if reconnecting mid-struggle;
+    // his real-time empathetic adaptation comes from reading tone in the
+    // live conversation directly (see EMOTIONAL INTELLIGENCE in the
+    // system prompt), this is just a hint for the moment of reconnect.
+    const studentSentimentHint = computeSentimentHint(history);
 
     const tokenRes = await fetch("/api/anam/token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      body: JSON.stringify({ 
         conversationHistory: history,
-        speechPace: speechPace, // ← Added this
+        speechPace: speechPace,
+        studentSentimentHint: studentSentimentHint,
       }),
     });
 
+
+    
     const tokenData = await tokenRes.json();
     if (tokenData.demo_mode || !tokenData.session_token) {
       addSystemNote("⚠️ ANAM_API_KEY not configured on server.");
@@ -419,6 +433,24 @@ function onStudentStoppedTyping() {
   }
 }
 
+// Soft, non-blocking privacy reminder shown whenever the student pastes
+// text into the message box. This does NOT block, alter, or inspect the
+// pasted content in any way — it only shows a brief heads-up, since real
+// personal data (names, emails, IDs) is something students sometimes
+// paste in without thinking when copying an error message or assignment
+// text that happens to include their own details.
+let pasteWarningTimer = null;
+function onMessageInputPaste() {
+  const banner = document.getElementById("paste-warning");
+  if (!banner) return;
+  banner.classList.remove("hidden");
+  // Restart the dismiss timer on every paste rather than stacking timers
+  clearTimeout(pasteWarningTimer);
+  pasteWarningTimer = setTimeout(() => {
+    banner.classList.add("hidden");
+  }, 6000);
+}
+
 // Called by USER_SPEECH_STARTED SDK event
 function onStudentSpeaking() {
   state.studentSpeaking = true;
@@ -499,6 +531,84 @@ function sendTextMessage() {
   if (state.anamClient?.sendUserMessage)
     state.anamClient.sendUserMessage(message);
   messageInput.value = "";
+}
+
+// ── Sentiment hint (coarse heuristic, not a diagnosis) ─────────────
+// Scans the student's most recent messages for plain-text signals of
+// frustration/discouragement or confidence/momentum. This is a lightweight
+// pattern match — not sentiment-analysis ML, not a clinical assessment —
+// it exists only to give Pablo's empathetic response a head start on
+// reconnect. The live, real-time tone reading happens inside the LLM
+// itself via the EMOTIONAL INTELLIGENCE section of the system prompt.
+function computeSentimentHint(history) {
+  const studentMessages = history
+    .filter((e) => e.role === "user")
+    .slice(-5) // only look at the most recent few messages
+    .map((e) => e.text.toLowerCase());
+
+  if (studentMessages.length === 0) return "neutral";
+
+  const struggleSignals = [
+    "i don't know",
+    "i dont know",
+    "i give up",
+    "this is too hard",
+    "i'm stuck",
+    "im stuck",
+    "i can't",
+    "i cant",
+    "confused",
+    "frustrated",
+    "this isn't working",
+    "this is not working",
+    "still doesn't work",
+    "still not working",
+    "i don't understand",
+    "i dont understand",
+    "lost",
+    "no idea",
+  ];
+
+  const confidenceSignals = [
+    "got it",
+    "that makes sense",
+    "i understand",
+    "it works",
+    "that worked",
+    "thank you",
+    "thanks",
+    "great",
+    "perfect",
+    "makes sense now",
+    "i see",
+  ];
+
+  let struggleScore = 0;
+  let confidenceScore = 0;
+  let shortTerseCount = 0;
+
+  for (const msg of studentMessages) {
+    const trimmed = msg.trim();
+    if (struggleSignals.some((signal) => trimmed.includes(signal))) {
+      struggleScore++;
+    }
+    if (confidenceSignals.some((signal) => trimmed.includes(signal))) {
+      confidenceScore++;
+    }
+    // Very short replies (one or two words) repeated across several
+    // messages can indicate disengagement or frustration, especially
+    // after the mentor has just explained something at length.
+    const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+    if (wordCount > 0 && wordCount <= 2) shortTerseCount++;
+  }
+
+  // Several short terse replies in a row is itself a mild struggle signal,
+  // even without an explicit phrase like "I don't know".
+  if (shortTerseCount >= 3) struggleScore += 1;
+
+  if (struggleScore >= 2 && struggleScore > confidenceScore) return "struggling";
+  if (confidenceScore >= 2 && confidenceScore > struggleScore) return "confident";
+  return "neutral";
 }
 
 // ── Transcript helpers ────────────────────────────────────────────
@@ -1009,10 +1119,7 @@ function splitTextAndCode(raw) {
     match;
   while ((match = regex.exec(raw)) !== null) {
     if (match.index > lastIndex)
-      segments.push({
-        type: "text",
-        content: raw.slice(lastIndex, match.index),
-      });
+      segments.push({ type: "text", content: raw.slice(lastIndex, match.index) });
     segments.push({ type: "code", content: match[2] });
     lastIndex = regex.lastIndex;
   }
