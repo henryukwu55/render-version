@@ -1600,6 +1600,7 @@ init();
 //         if (existing && !existing.final) {
 //           existing.text = lastAssistant.content;
 //           existing.final = true;
+//           saveHistory();
 //         }
 //       }
 //       if (lastUser) {
@@ -1617,6 +1618,7 @@ init();
 //         if (logEntry) {
 //           logEntry.text = lastUser.content;
 //           logEntry.final = true;
+//           saveHistory();
 //         }
 //       }
 //     });
@@ -2075,7 +2077,7 @@ init();
 //     const time = timestamp();
 //     state.conversationLog.push({
 //       role: "mentor",
-//       text: "Mentor(VA)",
+//       text: "",
 //       time,
 //       final: false,
 //     });
