@@ -332,6 +332,7 @@ async function connect() {
         if (existing && !existing.final) {
           existing.text = lastAssistant.content;
           existing.final = true;
+          saveHistory();
         }
       }
       if (lastUser) {
@@ -349,6 +350,7 @@ async function connect() {
         if (logEntry) {
           logEntry.text = lastUser.content;
           logEntry.final = true;
+          saveHistory();
         }
       }
     });
@@ -807,7 +809,7 @@ function appendToCaraStream(fragment) {
     const time = timestamp();
     state.conversationLog.push({
       role: "mentor",
-      text: "Mentor(VA)",
+      text: "",
       time,
       final: false,
     });
@@ -1869,8 +1871,10 @@ init();
 //   // even without an explicit phrase like "I don't know".
 //   if (shortTerseCount >= 3) struggleScore += 1;
 
-//   if (struggleScore >= 2 && struggleScore > confidenceScore) return "struggling";
-//   if (confidenceScore >= 2 && confidenceScore > struggleScore) return "confident";
+//   if (struggleScore >= 2 && struggleScore > confidenceScore)
+//     return "struggling";
+//   if (confidenceScore >= 2 && confidenceScore > struggleScore)
+//     return "confident";
 //   return "neutral";
 // }
 
@@ -2382,7 +2386,10 @@ init();
 //     match;
 //   while ((match = regex.exec(raw)) !== null) {
 //     if (match.index > lastIndex)
-//       segments.push({ type: "text", content: raw.slice(lastIndex, match.index) });
+//       segments.push({
+//         type: "text",
+//         content: raw.slice(lastIndex, match.index),
+//       });
 //     segments.push({ type: "code", content: match[2] });
 //     lastIndex = regex.lastIndex;
 //   }
@@ -2461,6 +2468,9 @@ init();
 //   // Must happen before clearHistory() below, since that wipes the data
 //   // this reads from.
 //   downloadTranscriptPDF(true);
+//   // Capture the conversation BEFORE clearHistory() wipes it, so the
+//   // summary request below still has something to send.
+//   const finishedConversation = [...state.conversationLog];
 //   // Clear session memory only when session truly ends, not on disconnect
 //   clearHistory();
 //   if (!state.sessionToken) return;
@@ -2477,7 +2487,43 @@ init();
 //   } catch (err) {
 //     console.error("Failed to track session end:", err);
 //   }
+//   // Generate and store a short topic + 2-sentence summary for analytics
+//   // ("what are students asking about most"). This is awaited with a hard
+//   // timeout cap rather than fired-and-forgotten: a plain fire-and-forget
+//   // fetch() immediately followed by location.reload() below is a real
+//   // race condition — page reloads can and do abort in-flight requests
+//   // before the browser finishes sending them, which silently drops the
+//   // summary. Capping at 3s keeps the student from waiting on a slow LLM
+//   // call while still giving the request a genuine chance to complete.
+//   if (finishedConversation.length > 0) {
+//     await sendSessionSummaryWithTimeout(finishedConversation, 3000);
+//   }
 //   if (reason === "manual") location.reload();
+// }
+
+// function sendSessionSummaryWithTimeout(conversationLog, timeoutMs) {
+//   const controller = new AbortController();
+//   const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+//   return fetch("/api/session-summary", {
+//     method: "POST",
+//     headers: { "Content-Type": "application/json" },
+//     body: JSON.stringify({
+//       sessionToken: state.sessionToken || null,
+//       accessCode: state.accessCode || null,
+//       conversationLog,
+//     }),
+//     signal: controller.signal,
+//   })
+//     .then(() => {
+//       clearTimeout(timer);
+//     })
+//     .catch((err) => {
+//       clearTimeout(timer);
+//       // Timeout or network failure — log it, but never let this block
+//       // or break the session-end flow that follows.
+//       console.error("Session summary request failed or timed out:", err);
+//     });
 // }
 
 // window.addEventListener("beforeunload", () => {
