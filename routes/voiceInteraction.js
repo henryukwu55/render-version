@@ -1,0 +1,100 @@
+/**
+ * routes/voiceInteraction.js
+ *
+ * Logs one row per completed voice EXCHANGE (student speaks, Pablo
+ * replies) for analytics: how long students talk, how responsive Pablo
+ * is, and roughly how much each side says per turn. Fed by timing
+ * events already wired up in script.js (USER_SPEECH_STARTED/ENDED,
+ * appendToCaraStream's first fragment, finaliseCaraStream).
+ *
+ * This is fire-and-forget from the frontend's perspective — a single
+ * missed log row is not worth blocking or slowing down the live
+ * conversation, so failures here are logged but never surfaced to the
+ * student.
+ */
+
+const express = require("express");
+const router = express.Router();
+const { query } = require("../api/db");
+
+// POST /api/voice-interaction
+// Body: {
+//   sessionToken, accessCode,
+//   studentSpeechDurationMs, studentMessageLength,
+//   mentorResponseLatencyMs, mentorResponseDurationMs, mentorMessageLength
+// }
+router.post("/", async (req, res) => {
+  const {
+    sessionToken,
+    accessCode,
+    studentSpeechDurationMs,
+    studentMessageLength,
+    mentorResponseLatencyMs,
+    mentorResponseDurationMs,
+    mentorMessageLength,
+  } = req.body || {};
+
+  // Look up the integer user_sessions.id from the token, same pattern
+  // as session-summary — the frontend only ever has the token string.
+  let sessionId = null;
+  if (sessionToken) {
+    try {
+      const lookup = await query(
+        `SELECT id FROM user_sessions WHERE session_token = $1 LIMIT 1`,
+        [sessionToken],
+      );
+      sessionId = lookup.rows[0]?.id || null;
+    } catch (err) {
+      console.error("Voice interaction session lookup error:", err.message);
+    }
+  }
+
+  try {
+    await query(
+      `INSERT INTO voice_interactions (
+         user_session_id, access_code, interaction_type,
+         student_speech_duration_ms, student_message_length,
+         mentor_response_latency_ms, mentor_response_duration_ms, mentor_message_length
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        sessionId,
+        accessCode || null,
+        "exchange",
+        studentSpeechDurationMs ?? null,
+        studentMessageLength ?? null,
+        mentorResponseLatencyMs ?? null,
+        mentorResponseDurationMs ?? null,
+        mentorMessageLength ?? null,
+      ],
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error("❌ Failed to store voice interaction:", err.message);
+    // Never block or alarm the student over an analytics log failure.
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// GET /api/voice-interaction/stats
+// Aggregate stats — average response latency, average speech length, etc.
+router.get("/stats", async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT
+        COUNT(*) AS total_exchanges,
+        ROUND(AVG(student_speech_duration_ms)) AS avg_student_speech_ms,
+        ROUND(AVG(student_message_length)) AS avg_student_message_length,
+        ROUND(AVG(mentor_response_latency_ms)) AS avg_mentor_latency_ms,
+        ROUND(AVG(mentor_response_duration_ms)) AS avg_mentor_response_ms,
+        ROUND(AVG(mentor_message_length)) AS avg_mentor_message_length
+      FROM voice_interactions
+      WHERE interaction_type = 'exchange'
+    `);
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Voice interaction stats error:", err.message);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+module.exports = router;
