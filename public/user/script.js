@@ -474,6 +474,9 @@ function onStudentSpeaking() {
   state.voiceTiming.studentSpeechEndedAt = null;
   state.voiceTiming.mentorFirstFragmentAt = null;
   state.voiceTiming.mentorRepliedToVoice = true;
+  console.log(
+    "🎤 [voice-timing] USER_SPEECH_STARTED — timers reset, mentorRepliedToVoice=true",
+  );
 }
 
 // Called by USER_SPEECH_ENDED SDK event
@@ -485,6 +488,7 @@ function onStudentFinishedSpeaking() {
     setStudentActivityIndicator(null);
   }
   state.voiceTiming.studentSpeechEndedAt = performance.now();
+  console.log("🎤 [voice-timing] USER_SPEECH_ENDED — studentSpeechEndedAt set");
 }
 
 // Shows/hides the "student is responding" indicator in the transcript
@@ -839,6 +843,14 @@ function appendToCaraStream(fragment) {
       state.voiceTiming.studentSpeechEndedAt !== null
     ) {
       state.voiceTiming.mentorFirstFragmentAt = performance.now();
+      console.log("🎤 [voice-timing] mentorFirstFragmentAt captured");
+    } else {
+      console.log(
+        "🎤 [voice-timing] new bubble started but NOT captured as voice latency — " +
+          `mentorRepliedToVoice=${state.voiceTiming.mentorRepliedToVoice}, ` +
+          `mentorFirstFragmentAt=${state.voiceTiming.mentorFirstFragmentAt}, ` +
+          `studentSpeechEndedAt=${state.voiceTiming.studentSpeechEndedAt}`,
+      );
     }
     state.conversationLog.push({
       role: "mentor",
@@ -923,7 +935,12 @@ function renderStreamingContent(contentEl, fullText) {
 
 // Finalise — apply full syntax highlighting, remove cursor
 function finaliseCaraStream(finalText) {
-  if (!state.caraStreamBubble) return;
+  if (!state.caraStreamBubble) {
+    console.log(
+      "🎤 [voice-timing] finaliseCaraStream called with NO open bubble — early return",
+    );
+    return;
+  }
   const { contentEl, cursor } = state.caraStreamBubble;
   const text =
     finalText && finalText.trim() ? finalText.trim() : state.caraStreamText;
@@ -953,6 +970,7 @@ function finaliseCaraStream(finalText) {
     state.voiceTiming.mentorFirstFragmentAt !== null
   ) {
     const mentorFinishedAt = performance.now();
+    console.log("🎤 [voice-timing] all conditions met — logging exchange now");
     logVoiceExchange({
       studentSpeechDurationMs: Math.round(
         state.voiceTiming.studentSpeechEndedAt -
@@ -968,6 +986,14 @@ function finaliseCaraStream(finalText) {
       ),
       mentorMessageLength: text.length,
     });
+  } else {
+    console.log(
+      "🎤 [voice-timing] finaliseCaraStream ran but did NOT log an exchange — " +
+        `mentorRepliedToVoice=${state.voiceTiming.mentorRepliedToVoice}, ` +
+        `studentSpeechStartedAt=${state.voiceTiming.studentSpeechStartedAt}, ` +
+        `studentSpeechEndedAt=${state.voiceTiming.studentSpeechEndedAt}, ` +
+        `mentorFirstFragmentAt=${state.voiceTiming.mentorFirstFragmentAt}`,
+    );
   }
   // Reset timing state so the next exchange starts clean. Doesn't matter
   // whether this turn was voice or text — either way we're done with it.
@@ -1377,6 +1403,17 @@ init();
 //   studentTyping: false,
 //   studentSpeaking: false,
 //   typingTimer: null, // debounce — clears "typing" state after pause
+//   // Voice exchange timing — used to log one row per student-speaks /
+//   // mentor-replies pair to the voice_interactions table for analytics
+//   // (response latency, speech length, etc). Voice-only: typed messages
+//   // don't go through this since there's no meaningful "speech duration"
+//   // for text.
+//   voiceTiming: {
+//     studentSpeechStartedAt: null,
+//     studentSpeechEndedAt: null,
+//     mentorFirstFragmentAt: null,
+//     mentorRepliedToVoice: false, // true only if the upcoming reply follows voice input
+//   },
 // };
 
 // // ── DOM ──────────────────────────────────────────────────────────
@@ -1818,6 +1855,11 @@ init();
 //   state.anamClient?.muteOutputAudio?.();
 //   micStatus.textContent = "🎤 Listening…";
 //   setStudentActivityIndicator("speaking");
+//   // Start of a voice exchange — mark when speech began
+//   state.voiceTiming.studentSpeechStartedAt = performance.now();
+//   state.voiceTiming.studentSpeechEndedAt = null;
+//   state.voiceTiming.mentorFirstFragmentAt = null;
+//   state.voiceTiming.mentorRepliedToVoice = true;
 // }
 
 // // Called by USER_SPEECH_ENDED SDK event
@@ -1828,6 +1870,7 @@ init();
 //     state.anamClient?.unmuteOutputAudio?.();
 //     setStudentActivityIndicator(null);
 //   }
+//   state.voiceTiming.studentSpeechEndedAt = performance.now();
 // }
 
 // // Shows/hides the "student is responding" indicator in the transcript
@@ -1886,6 +1929,9 @@ init();
 //   // this the next reply's fragments silently append into the still-open
 //   // bubble from the previous turn instead of starting a new one.
 //   finaliseCaraStream();
+//   // The upcoming reply is responding to TEXT, not voice — make sure it
+//   // doesn't get logged as a voice interaction exchange.
+//   state.voiceTiming.mentorRepliedToVoice = false;
 //   addUserBubble(message, true);
 //   if (state.anamClient?.sendUserMessage)
 //     state.anamClient.sendUserMessage(message);
@@ -2167,6 +2213,19 @@ init();
 //   if (!fragment) return;
 //   if (!state.caraStreamBubble) {
 //     const time = timestamp();
+//     // If this new bubble follows voice input, capture the latency from
+//     // when the student stopped speaking to Pablo's first word. Only
+//     // captured once per bubble (the very first fragment), and only when
+//     // mentorRepliedToVoice is still true — sendTextMessage() sets this
+//     // false via finaliseCaraStream's reset below so typed exchanges
+//     // don't get logged as voice interactions.
+//     if (
+//       state.voiceTiming.mentorRepliedToVoice &&
+//       state.voiceTiming.mentorFirstFragmentAt === null &&
+//       state.voiceTiming.studentSpeechEndedAt !== null
+//     ) {
+//       state.voiceTiming.mentorFirstFragmentAt = performance.now();
+//     }
 //     state.conversationLog.push({
 //       role: "mentor",
 //       text: "",
@@ -2269,8 +2328,67 @@ init();
 //   state.caraStreamBubble.renderScheduled = false;
 //   renderSegments(contentEl, parseSegments(text));
 //   if (cursor.parentNode) cursor.parentNode.removeChild(cursor);
+
+//   // If this reply followed voice input, log the completed exchange now
+//   // that we have all four timestamps: when the student started/stopped
+//   // speaking, and when Pablo's first fragment and final text landed.
+//   if (
+//     state.voiceTiming.mentorRepliedToVoice &&
+//     state.voiceTiming.studentSpeechStartedAt !== null &&
+//     state.voiceTiming.studentSpeechEndedAt !== null &&
+//     state.voiceTiming.mentorFirstFragmentAt !== null
+//   ) {
+//     const mentorFinishedAt = performance.now();
+//     logVoiceExchange({
+//       studentSpeechDurationMs: Math.round(
+//         state.voiceTiming.studentSpeechEndedAt -
+//           state.voiceTiming.studentSpeechStartedAt,
+//       ),
+//       studentMessageLength: getLastStudentMessageLength(),
+//       mentorResponseLatencyMs: Math.round(
+//         state.voiceTiming.mentorFirstFragmentAt -
+//           state.voiceTiming.studentSpeechEndedAt,
+//       ),
+//       mentorResponseDurationMs: Math.round(
+//         mentorFinishedAt - state.voiceTiming.mentorFirstFragmentAt,
+//       ),
+//       mentorMessageLength: text.length,
+//     });
+//   }
+//   // Reset timing state so the next exchange starts clean. Doesn't matter
+//   // whether this turn was voice or text — either way we're done with it.
+//   state.voiceTiming.studentSpeechStartedAt = null;
+//   state.voiceTiming.studentSpeechEndedAt = null;
+//   state.voiceTiming.mentorFirstFragmentAt = null;
+//   state.voiceTiming.mentorRepliedToVoice = false;
+
 //   state.caraStreamBubble = null;
 //   state.caraStreamText = "";
+// }
+
+// // Grabs the most recent student message's character length, used as a
+// // rough proxy for "how much the student said" in a voice exchange
+// // (Anam's speech-to-text transcript length, not audio duration).
+// function getLastStudentMessageLength() {
+//   const lastUser = state.conversationLog.findLast?.((e) => e.role === "user");
+//   return lastUser?.text ? lastUser.text.length : null;
+// }
+
+// // Fire-and-forget log of one completed voice exchange to the backend.
+// // A missed log row is not worth blocking or slowing down the live
+// // conversation over, so failures here are caught and logged only.
+// function logVoiceExchange(metrics) {
+//   fetch("/api/voice-interaction", {
+//     method: "POST",
+//     headers: { "Content-Type": "application/json" },
+//     body: JSON.stringify({
+//       sessionToken: state.sessionToken || null,
+//       accessCode: state.accessCode || null,
+//       ...metrics,
+//     }),
+//   }).catch((err) =>
+//     console.error("Voice interaction log failed (non-fatal):", err),
+//   );
 // }
 
 // function scrollTranscript() {
