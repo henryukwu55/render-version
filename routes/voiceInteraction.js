@@ -16,6 +16,7 @@
 const express = require("express");
 const router = express.Router();
 const { query } = require("../api/db");
+const { authenticate } = require("../middleware/auth");
 
 // POST /api/voice-interaction
 // Body: {
@@ -77,7 +78,8 @@ router.post("/", async (req, res) => {
 
 // GET /api/voice-interaction/stats
 // Aggregate stats — average response latency, average speech length, etc.
-router.get("/stats", async (req, res) => {
+// Admin-only.
+router.get("/stats", authenticate, async (req, res) => {
   try {
     const result = await query(`
       SELECT
@@ -93,6 +95,59 @@ router.get("/stats", async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     console.error("Voice interaction stats error:", err.message);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// GET /api/voice-interaction/export?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Downloads a CSV of all voice interaction exchanges within the given
+// date range (inclusive) — response latency, speech length, etc. per
+// exchange, for handing off to academic staff for further analysis.
+// Admin-only.
+router.get("/export", authenticate, async (req, res) => {
+  const { rowsToCsv } = require("../utils/csv");
+  const { from, to } = req.query;
+
+  if (!from || !to) {
+    return res
+      .status(400)
+      .json({ error: "Both 'from' and 'to' query params (YYYY-MM-DD) are required" });
+  }
+
+  try {
+    const result = await query(
+      `SELECT id, user_session_id, access_code, interaction_type,
+              student_speech_duration_ms, student_message_length,
+              mentor_response_latency_ms, mentor_response_duration_ms, mentor_message_length,
+              created_at
+       FROM voice_interactions
+       WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day')
+       ORDER BY created_at DESC`,
+      [from, to],
+    );
+
+    const csv = rowsToCsv(result.rows, [
+      { key: "id", label: "ID" },
+      { key: "user_session_id", label: "Session ID" },
+      { key: "access_code", label: "Access Code" },
+      { key: "interaction_type", label: "Type" },
+      { key: "student_speech_duration_ms", label: "Student Speech Duration (ms)" },
+      { key: "student_message_length", label: "Student Message Length (chars)" },
+      { key: "mentor_response_latency_ms", label: "Mentor Response Latency (ms)" },
+      { key: "mentor_response_duration_ms", label: "Mentor Response Duration (ms)" },
+      { key: "mentor_message_length", label: "Mentor Message Length (chars)" },
+      { key: "created_at", label: "Created At" },
+    ]);
+
+    const filename = `voice-interactions_${from}_to_${to}.csv`;
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${filename}"`,
+    );
+    res.send(csv);
+  } catch (err) {
+    console.error("Voice interaction export error:", err.message);
     res.status(500).json({ error: "Database error" });
   }
 });

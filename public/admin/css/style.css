@@ -329,11 +329,21 @@ nav {
 #daily-table-wrap,
 #codes-table-wrap,
 #perf-table-wrap,
-#events-table-wrap {
+#events-table-wrap,
+#topics-table-wrap,
+#summaries-table-wrap {
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+/* Summary text can be long — wrap instead of overflowing the row */
+#summaries-tbody td:last-child {
+  max-width: 420px;
+  white-space: normal;
+  line-height: 1.5;
 }
 
 /* ── Code Chip ── */

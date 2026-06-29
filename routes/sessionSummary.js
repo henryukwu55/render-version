@@ -16,6 +16,7 @@
 const express = require("express");
 const router = express.Router();
 const { query } = require("../api/db");
+const { authenticate } = require("../middleware/auth");
 
 // Works with either an Anthropic or OpenAI key — whichever is set.
 // Falls back to a simple heuristic summary if neither key is configured,
@@ -201,7 +202,9 @@ router.post("/", async (req, res) => {
 
 // GET /api/session-summary/topics
 // Returns topic counts for "most asked about" analytics.
-router.get("/topics", async (req, res) => {
+// Admin-only — this exposes summarised student data, unlike POST / above
+// which the student-facing page calls without a login.
+router.get("/topics", authenticate, async (req, res) => {
   try {
     const result = await query(`
       SELECT topic, COUNT(*) as session_count, MAX(created_at) as last_asked
@@ -219,7 +222,8 @@ router.get("/topics", async (req, res) => {
 
 // GET /api/session-summary/recent
 // Returns the most recent summaries, useful for an admin feed view.
-router.get("/recent", async (req, res) => {
+// Admin-only.
+router.get("/recent", authenticate, async (req, res) => {
   const limit = parseInt(req.query.limit) || 50;
   try {
     const result = await query(
@@ -232,6 +236,53 @@ router.get("/recent", async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     console.error("Recent summaries error:", err.message);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// GET /api/session-summary/export?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Downloads a CSV of all session summaries within the given date range
+// (inclusive). Intended for an admin to hand off to academic staff for
+// further analysis — "what are students asking about, and when".
+// Admin-only.
+router.get("/export", authenticate, async (req, res) => {
+  const { rowsToCsv } = require("../utils/csv");
+  const { from, to } = req.query;
+
+  if (!from || !to) {
+    return res.status(400).json({
+      error: "Both 'from' and 'to' query params (YYYY-MM-DD) are required",
+    });
+  }
+
+  try {
+    // 'to' is treated as inclusive of the whole day by adding 1 day and
+    // using a strict less-than, avoiding timezone-edge surprises from
+    // trying to do "<=  2026-06-29 23:59:59.999" directly.
+    const result = await query(
+      `SELECT id, session_id, access_code, topic, summary, message_count, created_at
+       FROM session_summaries
+       WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day')
+       ORDER BY created_at DESC`,
+      [from, to],
+    );
+
+    const csv = rowsToCsv(result.rows, [
+      { key: "id", label: "ID" },
+      { key: "session_id", label: "Session ID" },
+      { key: "access_code", label: "Access Code" },
+      { key: "topic", label: "Topic" },
+      { key: "summary", label: "Summary" },
+      { key: "message_count", label: "Message Count" },
+      { key: "created_at", label: "Created At" },
+    ]);
+
+    const filename = `session-summaries_${from}_to_${to}.csv`;
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(csv);
+  } catch (err) {
+    console.error("Session summary export error:", err.message);
     res.status(500).json({ error: "Database error" });
   }
 });
@@ -284,7 +335,7 @@ module.exports = router;
 //           "anthropic-version": "2023-06-01",
 //         },
 //         body: JSON.stringify({
-//           model: "claude-3-5-haiku-20241022", // cheap + fast is fine for this
+//           model: "claude-3-5-haiku-20241022",
 //           max_tokens: 200,
 //           messages: [
 //             {
@@ -352,16 +403,12 @@ module.exports = router;
 //   }
 
 //   console.warn(
-//     "No ANTHROPIC_API_KEY or OPENAI_API_KEY set — using fallback summary",
+//     "No ANTHROPIC_API_KEY or OPENAI_API_KEY set, or both calls failed — using fallback summary",
 //   );
 //   return fallbackSummary();
 // }
 
 // function fallbackSummary() {
-//   // No API key configured, or the call failed.
-//   // Don't block session-end on this — just store a minimal placeholder
-//   // so the row still gets written and shows up in the analytics views,
-//   // clearly flagged as unclassified rather than silently missing.
 //   return {
 //     topic: "Unclassified",
 //     summary:
@@ -371,7 +418,6 @@ module.exports = router;
 
 // function parseSummaryJson(text) {
 //   try {
-//     // Strip markdown fences if the model wrapped the JSON in them
 //     const cleaned = text.replace(/```json\s*|\s*```/g, "").trim();
 //     const parsed = JSON.parse(cleaned);
 //     return {
@@ -387,9 +433,11 @@ module.exports = router;
 // // POST /api/session-summary
 // // Body: { sessionToken, accessCode, conversationLog: [{role, text, time}] }
 // router.post("/", async (req, res) => {
+//   console.log("📝 POST /api/session-summary — request received");
 //   const { sessionToken, accessCode, conversationLog } = req.body || {};
 
 //   if (!Array.isArray(conversationLog) || conversationLog.length === 0) {
+//     console.warn("⚠️  /api/session-summary called with no conversationLog");
 //     return res.status(400).json({ error: "No conversation log provided" });
 //   }
 
@@ -399,10 +447,14 @@ module.exports = router;
 //     .join("\n");
 
 //   if (!transcriptText.trim()) {
+//     console.warn(
+//       "⚠️  /api/session-summary: conversationLog had no usable text",
+//     );
 //     return res.status(400).json({ error: "Conversation log is empty" });
 //   }
 
 //   const { topic, summary } = await generateSummary(transcriptText);
+//   console.log(`📝 Generated summary — topic: "${topic}"`);
 
 //   // Look up the integer user_sessions.id from the session_token, since
 //   // the frontend only ever has the token string, never the numeric id.
@@ -414,6 +466,11 @@ module.exports = router;
 //         [sessionToken],
 //       );
 //       sessionId = lookup.rows[0]?.id || null;
+//       if (!sessionId) {
+//         console.warn(
+//           "⚠️  No matching user_sessions row for session_token — storing summary with session_id = NULL",
+//         );
+//       }
 //     } catch (err) {
 //       console.error("Session lookup error:", err.message);
 //     }
@@ -425,11 +482,10 @@ module.exports = router;
 //        VALUES ($1, $2, $3, $4, $5)`,
 //       [sessionId, accessCode || null, topic, summary, conversationLog.length],
 //     );
+//     console.log("✅ session_summaries row inserted successfully");
 //     res.json({ success: true, topic, summary });
 //   } catch (err) {
-//     console.error("Failed to store session summary:", err.message);
-//     // Still return the generated summary even if the DB write failed,
-//     // so the frontend isn't left without feedback.
+//     console.error("❌ Failed to store session summary:", err.message);
 //     res.status(500).json({ error: "Database error", topic, summary });
 //   }
 // });
