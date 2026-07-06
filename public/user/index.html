@@ -205,6 +205,18 @@
         min-height: 20px;
       }
 
+      .code-or-divider {
+        color: var(--muted);
+        font-size: 12px;
+        margin: 1.25rem 0 0.75rem;
+      }
+      .email-input {
+        text-transform: none;
+        letter-spacing: normal;
+        font-size: 15px;
+        font-weight: 400;
+      }
+
       /* App Screen */
       #app-screen {
         display: flex;
@@ -778,6 +790,20 @@
           />
         </div>
         <button class="submit-btn" id="submit-code-btn">Start Session</button>
+        <p class="code-or-divider">— or —</p>
+        <div class="code-input-wrap">
+          <input
+            type="email"
+            id="student-email-input"
+            class="code-input email-input"
+            placeholder="you@amsterdam.tech"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+        <button class="submit-btn" id="submit-email-btn">
+          Continue with Email
+        </button>
         <p class="code-error" id="code-error"></p>
       </div>
     </div>

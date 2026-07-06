@@ -71,6 +71,16 @@
             </svg>
             Access Codes
           </a>
+          <a class="nav-item" data-tab="domains">
+            <svg viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="2" y1="12" x2="22" y2="12" />
+              <path
+                d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+              />
+            </svg>
+            Domains
+          </a>
           <a class="nav-item" data-tab="analytics">
             <svg viewBox="0 0 24 24">
               <line x1="18" y1="20" x2="18" y2="10" />
@@ -81,7 +91,9 @@
           </a>
           <a class="nav-item" data-tab="reports">
             <svg viewBox="0 0 24 24">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <path
+                d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+              />
               <polyline points="14 2 14 8 20 8" />
               <line x1="9" y1="13" x2="15" y2="13" />
               <line x1="9" y1="17" x2="15" y2="17" />
@@ -164,6 +176,48 @@
                 </tr>
               </thead>
               <tbody id="codes-tbody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- DOMAINS TAB -->
+        <section id="tab-domains" class="tab-panel hidden">
+          <h1 class="page-title">Email Domain Allowlist</h1>
+          <p class="section-subtitle">
+            Anyone entering an email ending in one of these domains gets
+            instant, unlimited access — no access code needed.
+          </p>
+          <div class="generate-box">
+            <div class="field inline">
+              <label>Domain</label>
+              <input
+                type="text"
+                id="new-domain-input"
+                placeholder="amsterdam.tech"
+              />
+            </div>
+            <div class="field inline">
+              <label>Label (optional)</label>
+              <input
+                type="text"
+                id="new-domain-label"
+                placeholder="Amsterdam Tech University"
+              />
+            </div>
+            <button class="btn-primary" id="add-domain-btn">Add Domain</button>
+            <div id="domain-error" class="error-msg hidden"></div>
+          </div>
+          <div id="domains-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Domain</th>
+                  <th>Label</th>
+                  <th>Added</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="domains-tbody"></tbody>
             </table>
           </div>
         </section>
