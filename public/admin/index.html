@@ -71,15 +71,12 @@
             </svg>
             Access Codes
           </a>
-          <a class="nav-item" data-tab="domains">
+          <a class="nav-item" data-tab="emails">
             <svg viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="2" y1="12" x2="22" y2="12" />
-              <path
-                d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
-              />
+              <path d="M4 4h16v16H4z" />
+              <path d="M4 6l8 7 8-7" />
             </svg>
-            Domains
+            Student Emails
           </a>
           <a class="nav-item" data-tab="analytics">
             <svg viewBox="0 0 24 24">
@@ -180,44 +177,61 @@
           </div>
         </section>
 
-        <!-- DOMAINS TAB -->
-        <section id="tab-domains" class="tab-panel hidden">
-          <h1 class="page-title">Email Domain Allowlist</h1>
+        <!-- STUDENT EMAILS TAB -->
+        <section id="tab-emails" class="tab-panel hidden">
+          <h1 class="page-title">Student Email Allowlist</h1>
           <p class="section-subtitle">
-            Anyone entering an email ending in one of these domains gets
-            instant, unlimited access — no access code needed.
+            Only these exact emails get instant, unlimited access — no access
+            code needed. Anyone else with an @amsterdam.tech email that isn't
+            listed here will be told to use an access code.
           </p>
+
+          <h2 class="section-title">Add one email</h2>
           <div class="generate-box">
             <div class="field inline">
-              <label>Domain</label>
+              <label>Email</label>
               <input
-                type="text"
-                id="new-domain-input"
-                placeholder="amsterdam.tech"
+                type="email"
+                id="new-email-input"
+                placeholder="student@amsterdam.tech"
               />
             </div>
             <div class="field inline">
               <label>Label (optional)</label>
               <input
                 type="text"
-                id="new-domain-label"
-                placeholder="Amsterdam Tech University"
+                id="new-email-label"
+                placeholder="Student name"
               />
             </div>
-            <button class="btn-primary" id="add-domain-btn">Add Domain</button>
-            <div id="domain-error" class="error-msg hidden"></div>
+            <button class="btn-primary" id="add-email-btn">Add Email</button>
           </div>
-          <div id="domains-table-wrap">
+
+          <h2 class="section-title">Or paste a list</h2>
+          <div class="generate-box" style="align-items: flex-start">
+            <div class="field" style="flex: 1; min-width: 260px">
+              <label>Emails (one per line, or comma-separated)</label>
+              <textarea
+                id="bulk-email-input"
+                rows="5"
+                placeholder="jane@amsterdam.tech&#10;john@amsterdam.tech&#10;alex@amsterdam.tech"
+              ></textarea>
+            </div>
+            <button class="btn-primary" id="add-bulk-email-btn">Add All</button>
+          </div>
+          <div id="email-error" class="error-msg hidden"></div>
+
+          <div id="emails-table-wrap">
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>Domain</th>
+                  <th>Email</th>
                   <th>Label</th>
                   <th>Added</th>
                   <th></th>
                 </tr>
               </thead>
-              <tbody id="domains-tbody"></tbody>
+              <tbody id="emails-tbody"></tbody>
             </table>
           </div>
         </section>

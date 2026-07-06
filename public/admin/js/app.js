@@ -78,7 +78,7 @@ document.querySelectorAll(".nav-item").forEach((item) => {
     tab.classList.remove("hidden");
     tab.classList.add("active");
     if (item.dataset.tab === "codes") loadCodes();
-    if (item.dataset.tab === "domains") loadDomains();
+    if (item.dataset.tab === "emails") loadAllowedEmails();
     if (item.dataset.tab === "analytics") loadAnalytics();
     if (item.dataset.tab === "reports") loadReports();
   });
@@ -164,65 +164,93 @@ async function loadCodes() {
       '<tr><td colspan="6" style="text-align:center;color:var(--muted)">No codes yet</td></tr>';
 }
 
-// ── Domains ─────────────────────────────────────────────────────
-document.getElementById("add-domain-btn").addEventListener("click", async () => {
-  const domainInput = document.getElementById("new-domain-input");
-  const labelInput = document.getElementById("new-domain-label");
-  const errEl = document.getElementById("domain-error");
+// ── Student Emails ────────────────────────────────────────────────
+document.getElementById("add-email-btn").addEventListener("click", async () => {
+  const emailInput = document.getElementById("new-email-input");
+  const labelInput = document.getElementById("new-email-label");
+  const errEl = document.getElementById("email-error");
   errEl.classList.add("hidden");
 
-  const domain = domainInput.value.trim();
-  if (!domain) {
-    errEl.textContent = "Please enter a domain, e.g. amsterdam.tech";
+  const email = emailInput.value.trim();
+  if (!email) {
+    errEl.textContent = "Please enter an email address.";
     errEl.classList.remove("hidden");
     return;
   }
 
-  const res = await fetch("/api/codes/domains", {
+  const data = await postAllowedEmails({ email, label: labelInput.value.trim() }, errEl);
+  if (!data) return;
+
+  emailInput.value = "";
+  labelInput.value = "";
+  loadAllowedEmails();
+});
+
+document
+  .getElementById("add-bulk-email-btn")
+  .addEventListener("click", async () => {
+    const bulkInput = document.getElementById("bulk-email-input");
+    const errEl = document.getElementById("email-error");
+    errEl.classList.add("hidden");
+
+    const raw = bulkInput.value.trim();
+    if (!raw) {
+      errEl.textContent = "Paste at least one email first.";
+      errEl.classList.remove("hidden");
+      return;
+    }
+
+    const emails = raw.split(/[\n,;]+/).map((e) => e.trim()).filter(Boolean);
+    const data = await postAllowedEmails({ emails }, errEl);
+    if (!data) return;
+
+    bulkInput.value = "";
+    loadAllowedEmails();
+  });
+
+async function postAllowedEmails(body, errEl) {
+  const res = await fetch("/api/codes/allowed-emails", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
     },
-    body: JSON.stringify({ domain, label: labelInput.value.trim() }),
+    body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    errEl.textContent = data.error || "Failed to add domain.";
+    errEl.textContent = data.error || "Failed to add email(s).";
     errEl.classList.remove("hidden");
-    return;
+    return null;
   }
+  return data;
+}
 
-  domainInput.value = "";
-  labelInput.value = "";
-  loadDomains();
-});
-
-async function loadDomains() {
-  const domains = await api("GET", "/codes/domains");
-  if (!domains) return;
-  const tbody = document.getElementById("domains-tbody");
+async function loadAllowedEmails() {
+  const emails = await api("GET", "/codes/allowed-emails");
+  if (!emails) return;
+  const tbody = document.getElementById("emails-tbody");
   tbody.innerHTML = "";
-  domains.forEach((d) => {
+  emails.forEach((e) => {
     tbody.innerHTML += `
       <tr>
-        <td><span class="code-chip">${escapeHtml(d.domain)}</span></td>
-        <td>${d.label ? escapeHtml(d.label) : "—"}</td>
-        <td style="color:var(--muted)">${formatDate(d.created_at)}</td>
-        <td><button class="remove-domain-btn" data-id="${d.id}">Remove</button></td>
+        <td><span class="code-chip">${escapeHtml(e.email)}</span></td>
+        <td>${e.label ? escapeHtml(e.label) : "—"}</td>
+        <td style="color:var(--muted)">${formatDate(e.created_at)}</td>
+        <td><button class="remove-email-btn" data-id="${e.id}">Remove</button></td>
       </tr>`;
   });
-  if (!domains.length)
+  if (!emails.length)
     tbody.innerHTML =
-      '<tr><td colspan="4" style="text-align:center;color:var(--muted)">No domains allowlisted yet</td></tr>';
+      '<tr><td colspan="4" style="text-align:center;color:var(--muted)">No emails allowlisted yet</td></tr>';
 
-  tbody.querySelectorAll(".remove-domain-btn").forEach((btn) => {
+  tbody.querySelectorAll(".remove-email-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      if (!confirm("Remove this domain? Anyone using it will lose automatic access."))
+      if (!confirm("Remove this email? They'll lose automatic access."))
         return;
-      const ok = await api("DELETE", `/codes/domains/${btn.dataset.id}`);
-      if (ok) loadDomains();
+      const ok = await api("DELETE", `/codes/allowed-emails/${btn.dataset.id}`);
+      if (ok) loadAllowedEmails();
     });
   });
 }

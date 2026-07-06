@@ -185,75 +185,92 @@ router.get("/", authenticate, async (req, res) => {
   }
 });
 
-// ── DOMAIN ALLOWLIST MANAGEMENT (admin only) ──────────────────────
-// GET all allowlisted domains
-router.get("/domains", authenticate, async (req, res) => {
+// ── STUDENT EMAIL ALLOWLIST MANAGEMENT (admin only) ───────────────
+// GET all allowlisted emails
+router.get("/allowed-emails", authenticate, async (req, res) => {
   try {
     const result = await query(
-      `SELECT id, domain, label, is_active, created_at
-       FROM allowed_email_domains
+      `SELECT id, email, label, is_active, created_at
+       FROM allowed_student_emails
        ORDER BY created_at DESC`,
     );
     res.json(result.rows);
   } catch (error) {
-    console.error("Get domains error:", error);
+    console.error("Get allowed emails error:", error);
     res.status(500).json({ error: "Database error" });
   }
 });
 
-// ADD a new allowlisted domain
-router.post("/domains", authenticate, async (req, res) => {
-  let { domain, label } = req.body;
+// ADD one or more allowlisted emails.
+// Body: { email: "a@x.com", label: "optional" }  — single
+//    or { emails: ["a@x.com", "b@x.com", ...] }   — bulk paste
+router.post("/allowed-emails", authenticate, async (req, res) => {
+  const { email, label, emails } = req.body;
 
-  if (!domain || !domain.trim()) {
-    return res.status(400).json({ error: "Domain is required" });
+  let list = [];
+  if (Array.isArray(emails)) {
+    list = emails;
+  } else if (email) {
+    list = [email];
   }
 
-  // Accept either "amsterdam.tech" or "@amsterdam.tech" or a full email —
-  // normalise down to just the bare domain either way.
-  domain = domain.trim().toLowerCase().replace(/^@/, "");
-  if (domain.includes("@")) domain = domain.split("@")[1];
+  // Support a bulk textarea paste where entries are separated by commas,
+  // semicolons, or newlines all mixed together.
+  list = list
+    .flatMap((raw) => String(raw).split(/[\n,;]+/))
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => e.includes("@"));
 
-  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) {
-    return res
-      .status(400)
-      .json({ error: "That doesn't look like a valid domain" });
+  if (list.length === 0) {
+    return res.status(400).json({ error: "At least one valid email is required" });
+  }
+
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const invalid = list.filter((e) => !emailPattern.test(e));
+  if (invalid.length > 0) {
+    return res.status(400).json({
+      error: `These don't look like valid emails: ${invalid.slice(0, 5).join(", ")}`,
+    });
   }
 
   try {
-    const result = await query(
-      `INSERT INTO allowed_email_domains (domain, label)
-       VALUES ($1, $2)
-       ON CONFLICT (domain) DO UPDATE SET is_active = true, label = EXCLUDED.label
-       RETURNING id, domain, label, is_active, created_at`,
-      [domain, label?.trim() || null],
-    );
-    res.json(result.rows[0]);
+    const inserted = [];
+    for (const e of list) {
+      const result = await query(
+        `INSERT INTO allowed_student_emails (email, label)
+         VALUES ($1, $2)
+         ON CONFLICT (email) DO UPDATE SET is_active = true
+         RETURNING id, email, label, is_active, created_at`,
+        [e, list.length === 1 ? label?.trim() || null : null],
+      );
+      inserted.push(result.rows[0]);
+    }
+    res.json({ added: inserted.length, emails: inserted });
   } catch (error) {
-    console.error("Add domain error:", error);
+    console.error("Add allowed email error:", error);
     res.status(500).json({ error: "Database error" });
   }
 });
 
-// REMOVE an allowlisted domain
-router.delete("/domains/:id", authenticate, async (req, res) => {
+// REMOVE an allowlisted email
+router.delete("/allowed-emails/:id", authenticate, async (req, res) => {
   const { id } = req.params;
   try {
     const result = await query(
-      "DELETE FROM allowed_email_domains WHERE id = $1 RETURNING id",
+      "DELETE FROM allowed_student_emails WHERE id = $1 RETURNING id",
       [id],
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Domain not found" });
+      return res.status(404).json({ error: "Email not found" });
     }
     res.json({ success: true });
   } catch (error) {
-    console.error("Delete domain error:", error);
+    console.error("Delete allowed email error:", error);
     res.status(500).json({ error: "Database error" });
   }
 });
 
-// EMAIL DOMAIN ACCESS — permanent, no code needed for allowlisted domains
+// EMAIL ACCESS — permanent, no code needed for allowlisted student emails
 router.post("/email-access", async (req, res) => {
   const { email } = req.body;
 
@@ -261,18 +278,18 @@ router.post("/email-access", async (req, res) => {
     return res.status(400).json({ error: "Valid email required" });
   }
 
-  const domain = email.trim().toLowerCase().split("@")[1];
+  const cleanEmail = email.trim().toLowerCase();
 
   try {
     const result = await query(
-      "SELECT domain, label FROM allowed_email_domains WHERE domain = $1 AND is_active = true",
-      [domain],
+      "SELECT id FROM allowed_student_emails WHERE email = $1 AND is_active = true",
+      [cleanEmail],
     );
 
     if (result.rows.length === 0) {
       return res.status(403).json({
         error:
-          "This email isn't on the automatic access list. Please use an access code instead.",
+          "This email isn't on the access list. Please use an access code instead.",
       });
     }
 
@@ -281,21 +298,16 @@ router.post("/email-access", async (req, res) => {
     const sessionResult = await query(
       `INSERT INTO user_sessions (session_token, email, is_permanent, ip_address, user_agent)
        VALUES ($1, $2, true, $3, $4) RETURNING id`,
-      [
-        sessionToken,
-        email.trim().toLowerCase(),
-        req.ip,
-        req.headers["user-agent"],
-      ],
+      [sessionToken, cleanEmail, req.ip, req.headers["user-agent"]],
     );
 
     query(
       `INSERT INTO analytics_events (event_type, user_session_id, metadata, ip_address)
        VALUES ($1, $2, $3, $4)`,
       [
-        "domain_access_granted",
+        "email_access_granted",
         sessionResult.rows[0].id,
-        JSON.stringify({ domain, email: email.trim().toLowerCase() }),
+        JSON.stringify({ email: cleanEmail }),
         req.ip,
       ],
     ).catch((err) => console.error("Analytics error:", err.message));
