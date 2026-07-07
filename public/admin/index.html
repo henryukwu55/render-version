@@ -10,6 +10,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/admin/css/style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   </head>
   <body>
     <!-- LOGIN SCREEN -->
@@ -239,6 +240,51 @@
         <!-- ANALYTICS TAB -->
         <section id="tab-analytics" class="tab-panel hidden">
           <h1 class="page-title">Analytics</h1>
+
+          <div class="chart-grid">
+            <div class="chart-card chart-card-wide">
+              <h2 class="section-title">Engagement Over Time (30 days)</h2>
+              <p class="section-subtitle">
+                Email-access (unlimited) students only — access-code sessions
+                are tracked separately below.
+              </p>
+              <canvas id="engagement-chart" height="90"></canvas>
+            </div>
+            <div class="chart-card">
+              <h2 class="section-title">Session Outcomes</h2>
+              <p class="section-subtitle">Email-access students only.</p>
+              <canvas id="outcomes-chart" height="90"></canvas>
+            </div>
+          </div>
+
+          <div class="chart-grid">
+            <div class="chart-card chart-card-wide">
+              <h2 class="section-title">Most Asked About</h2>
+              <canvas id="topics-chart" height="80"></canvas>
+            </div>
+          </div>
+
+          <h2 class="section-title">Student Engagement</h2>
+          <p class="section-subtitle">
+            Sorted by least recently active first — this is your outreach list.
+            "Never" means the student has never started a session.
+          </p>
+          <div id="student-engagement-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Sessions</th>
+                  <th>Last Active</th>
+                  <th>Avg. Session</th>
+                  <th>Topics Covered</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="student-engagement-tbody"></tbody>
+            </table>
+          </div>
+
           <h2 class="section-title">Code Performance</h2>
           <div id="perf-table-wrap">
             <table class="data-table">

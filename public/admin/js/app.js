@@ -257,8 +257,181 @@ async function loadAllowedEmails() {
 
 // ── Analytics ───────────────────────────────────────────────────
 async function loadAnalytics() {
+  loadEngagementTrend();
+  loadSessionOutcomes();
+  loadTopicsChart();
+  loadStudentEngagement();
   loadCodePerformance();
   loadEvents();
+}
+
+let engagementChartInstance = null;
+async function loadEngagementTrend() {
+  const rows = await api("GET", "/analytics/engagement-trend?days=30");
+  if (!rows) return;
+
+  const labels = rows.map((r) =>
+    new Date(r.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
+  );
+  const sessions = rows.map((r) => parseInt(r.sessions));
+  const students = rows.map((r) => parseInt(r.unique_students));
+
+  const ctx = document.getElementById("engagement-chart");
+  if (engagementChartInstance) engagementChartInstance.destroy();
+  engagementChartInstance = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Sessions",
+          data: sessions,
+          borderColor: "#7c6dfa",
+          backgroundColor: "rgba(124, 109, 250, 0.15)",
+          fill: true,
+          tension: 0.3,
+        },
+        {
+          label: "Unique Students",
+          data: students,
+          borderColor: "#34d399",
+          backgroundColor: "rgba(52, 211, 153, 0.1)",
+          fill: true,
+          tension: 0.3,
+        },
+      ],
+    },
+    options: chartBaseOptions(),
+  });
+}
+
+let outcomesChartInstance = null;
+async function loadSessionOutcomes() {
+  const data = await api("GET", "/analytics/session-outcomes");
+  if (!data) return;
+
+  const ctx = document.getElementById("outcomes-chart");
+  if (outcomesChartInstance) outcomesChartInstance.destroy();
+  outcomesChartInstance = new Chart(ctx, {
+    type: "doughnut",
+    data: {
+      labels: ["Ended by Student", "No Clean End"],
+      datasets: [
+        {
+          data: [
+            parseInt(data.ended_by_student) || 0,
+            parseInt(data.no_clean_end) || 0,
+          ],
+          backgroundColor: ["#34d399", "#f87171"],
+          borderWidth: 0,
+        },
+      ],
+    },
+    options: {
+      ...chartBaseOptions(),
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: { color: "#888898", font: { family: "DM Sans", size: 11 } },
+        },
+      },
+    },
+  });
+}
+
+let topicsChartInstance = null;
+async function loadTopicsChart() {
+  const rows = await api("GET", "/session-summary/topics");
+  if (!rows) return;
+  const top = rows.slice(0, 10);
+
+  const ctx = document.getElementById("topics-chart");
+  if (topicsChartInstance) topicsChartInstance.destroy();
+  topicsChartInstance = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: top.map((r) => r.topic || "Untitled"),
+      datasets: [
+        {
+          label: "Sessions",
+          data: top.map((r) => parseInt(r.session_count)),
+          backgroundColor: "#a78bfa",
+          borderRadius: 4,
+        },
+      ],
+    },
+    options: {
+      ...chartBaseOptions(),
+      indexAxis: "y",
+      plugins: { legend: { display: false } },
+    },
+  });
+}
+
+function chartBaseOptions() {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: {
+        ticks: { color: "#888898", font: { family: "DM Sans", size: 11 } },
+        grid: { color: "rgba(255,255,255,0.05)" },
+      },
+      y: {
+        ticks: { color: "#888898", font: { family: "DM Sans", size: 11 } },
+        grid: { color: "rgba(255,255,255,0.05)" },
+      },
+    },
+    plugins: {
+      legend: {
+        labels: { color: "#888898", font: { family: "DM Sans", size: 11 } },
+      },
+    },
+  };
+}
+
+async function loadStudentEngagement() {
+  const rows = await api("GET", "/analytics/student-engagement");
+  if (!rows) return;
+  const tbody = document.getElementById("student-engagement-tbody");
+  tbody.innerHTML = "";
+
+  rows.forEach((r) => {
+    const sessionCount = parseInt(r.session_count);
+    let status, statusClass;
+    if (sessionCount === 0) {
+      status = "Never logged in";
+      statusClass = "status-never";
+    } else {
+      const daysSince = r.last_active
+        ? (Date.now() - new Date(r.last_active).getTime()) / 86400000
+        : Infinity;
+      if (daysSince > 14) {
+        status = "Inactive 14+ days";
+        statusClass = "status-inactive";
+      } else {
+        status = "Active";
+        statusClass = "status-active";
+      }
+    }
+
+    tbody.innerHTML += `
+      <tr>
+        <td>
+          <div>${escapeHtml(r.email)}</div>
+          ${r.label ? `<div style="color:var(--muted);font-size:12px">${escapeHtml(r.label)}</div>` : ""}
+        </td>
+        <td>${sessionCount}</td>
+        <td style="color:var(--muted)">${r.last_active ? formatDateTime(r.last_active) : "Never"}</td>
+        <td>${r.avg_session_seconds ? formatDuration(Math.round(r.avg_session_seconds)) : "—"}</td>
+        <td>${r.distinct_topics || 0}</td>
+        <td><span class="status-badge ${statusClass}">${status}</span></td>
+      </tr>`;
+  });
+
+  if (!rows.length)
+    tbody.innerHTML =
+      '<tr><td colspan="6" style="text-align:center;color:var(--muted)">No allowlisted students yet</td></tr>';
 }
 
 async function loadCodePerformance() {

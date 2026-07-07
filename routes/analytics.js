@@ -1,10 +1,11 @@
 const express = require("express");
 const { query } = require("../api/db");
+const { authenticate } = require("../middleware/auth");
 
 const router = express.Router();
 
 // Get analytics summary for dashboard
-router.get("/summary", async (req, res) => {
+router.get("/summary", authenticate, async (req, res) => {
   try {
     const totalsResult = await query(`
       SELECT 
@@ -50,7 +51,7 @@ router.get("/summary", async (req, res) => {
 });
 
 // Get code performance analytics
-router.get("/code-performance", async (req, res) => {
+router.get("/code-performance", authenticate, async (req, res) => {
   try {
     const result = await query(`
       SELECT 
@@ -74,7 +75,7 @@ router.get("/code-performance", async (req, res) => {
 });
 
 // Get recent events with filtering
-router.get("/events", async (req, res) => {
+router.get("/events", authenticate, async (req, res) => {
   const { type, limit = 50 } = req.query;
 
   try {
@@ -97,6 +98,85 @@ router.get("/events", async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error("Events error:", error);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// Daily engagement trend — sessions started + unique students per day,
+// for the student success office to spot usage trends over time.
+// Scoped to permanent (email-based, unlimited-access) sessions only —
+// that's the identifiable student population the success office
+// actually tracks; access-code sessions are anonymous one-offs and
+// live in the separate Code Performance table instead.
+router.get("/engagement-trend", authenticate, async (req, res) => {
+  const days = Math.min(parseInt(req.query.days) || 30, 90);
+  try {
+    const result = await query(
+      `SELECT
+         DATE(started_at) AS date,
+         COUNT(*) AS sessions,
+         COUNT(DISTINCT email) AS unique_students
+       FROM user_sessions
+       WHERE is_permanent = true
+         AND started_at > NOW() - ($1 || ' days')::INTERVAL
+       GROUP BY DATE(started_at)
+       ORDER BY date ASC`,
+      [days],
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Engagement trend error:", error);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// How sessions end — ended by the student themselves, or never cleanly
+// ended (tab closed / connection dropped mid-session). Permanent
+// sessions have no timer, so there's no "expired" case here — that
+// only applies to timed access-code sessions, covered separately in
+// Code Performance. "No clean end" is the signal worth watching: it
+// can mean a technical problem OR a student disengaging mid-session.
+router.get("/session-outcomes", authenticate, async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT
+        COUNT(CASE WHEN ended_reason = 'manual' THEN 1 END) AS ended_by_student,
+        COUNT(CASE WHEN ended_at IS NULL AND started_at < NOW() - INTERVAL '1 hour' THEN 1 END) AS no_clean_end
+      FROM user_sessions
+      WHERE is_permanent = true
+    `);
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Session outcomes error:", error);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// Per-student engagement — built from the exact allowlist so it also
+// surfaces students who have NEVER logged in, not just active ones.
+// Sorted so the least-engaged students surface first, since that's the
+// list most useful for outreach.
+router.get("/student-engagement", authenticate, async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT
+        ase.email,
+        ase.label,
+        COUNT(us.id) AS session_count,
+        MAX(us.started_at) AS last_active,
+        ROUND(AVG(EXTRACT(EPOCH FROM (us.ended_at - us.started_at))))
+          FILTER (WHERE us.ended_at IS NOT NULL) AS avg_session_seconds,
+        COUNT(DISTINCT ss.topic) AS distinct_topics
+      FROM allowed_student_emails ase
+      LEFT JOIN user_sessions us ON us.email = ase.email
+      LEFT JOIN session_summaries ss ON ss.session_id = us.id
+      WHERE ase.is_active = true
+      GROUP BY ase.email, ase.label
+      ORDER BY last_active ASC NULLS FIRST
+    `);
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Student engagement error:", error);
     res.status(500).json({ error: "Database error" });
   }
 });
