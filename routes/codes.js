@@ -222,7 +222,9 @@ router.post("/allowed-emails", authenticate, async (req, res) => {
     .filter((e) => e.includes("@"));
 
   if (list.length === 0) {
-    return res.status(400).json({ error: "At least one valid email is required" });
+    return res
+      .status(400)
+      .json({ error: "At least one valid email is required" });
   }
 
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
