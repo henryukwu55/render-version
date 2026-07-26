@@ -96,6 +96,19 @@ function init() {
       applyTheme(isLight ? "dark" : "light");
     });
   }
+
+  // ── Auto-login from an embedding SIS ──────────────────────────
+  // If this page is loaded with ?email=student@example.com (e.g. as an
+  // iframe from the student information system, which already knows
+  // who's logged in), skip the manual email-entry step entirely: fill
+  // the field and submit through the exact same path a student typing
+  // it in themselves would use, so every check (allowlist lookup,
+  // session creation, analytics event) behaves identically either way.
+  const autoEmail = new URLSearchParams(window.location.search).get("email");
+  if (autoEmail && emailInput) {
+    emailInput.value = autoEmail.trim();
+    submitStudentEmail();
+  }
 }
 
 function applyTheme(mode) {
