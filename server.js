@@ -13,10 +13,6 @@ const { authenticate } = require("./middleware/auth");
 
 const app = express();
 
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
 app.use((req, res, next) => {
   res.removeHeader("X-Frame-Options"); // remove any default protection
   res.setHeader(
@@ -25,6 +21,10 @@ app.use((req, res, next) => {
   );
   next();
 });
+
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.url}`);
