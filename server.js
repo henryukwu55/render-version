@@ -18,6 +18,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use((req, res, next) => {
+  res.removeHeader("X-Frame-Options"); // remove any default protection
+  res.setHeader(
+    "Content-Security-Policy",
+    "frame-ancestors 'self' https://student-management-system-beryl-phi.vercel.app",
+  );
+  next();
+});
+
+app.use((req, res, next) => {
   console.log(`${req.method} ${req.url}`);
   next();
 });
