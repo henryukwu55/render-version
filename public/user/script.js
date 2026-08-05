@@ -302,6 +302,7 @@ async function connect() {
         conversationHistory: history,
         speechPace: speechPace,
         studentSentimentHint: studentSentimentHint,
+        session_token: state.isPermanent ? state.sessionToken : null,
       }),
     });
 

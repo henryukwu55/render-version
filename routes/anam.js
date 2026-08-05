@@ -1,6 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const { KNOWLEDGE_BASE } = require("./knowledge");
+const { fetchStudentProfile, formatStudentProfileForPrompt } = require("../services/studentProfile");
+const { query } = require("../api/db");
 
 const PERSONA_CONFIG = {
   name: "Pablo",
@@ -386,6 +388,33 @@ router.all("/token", async (req, res) => {
   };
 
   systemPrompt = pacePrefixByMode[speechPace] + systemPrompt;
+
+  // ── Live student profile (attendance, points, season progress, etc.) ──
+  // Only available for email-based (SIS auto-login or allowlist) sessions.
+  // The email is NOT trusted from the request body directly -- a student
+  // could edit that to request someone else's profile. Instead we look
+  // it up server-side from user_sessions using the session_token that
+  // /api/codes/email-access already wrote there, so the profile can only
+  // ever be the one tied to this session's own verified login.
+  // Fetched fresh on every /token call (first connect AND reconnect) so
+  // it's always current. Never blocks or fails the session if unavailable.
+  const requestSessionToken = req.body?.session_token;
+  if (requestSessionToken) {
+    try {
+      const sessionResult = await query(
+        `SELECT email FROM user_sessions WHERE session_token = $1 AND is_permanent = true`,
+        [requestSessionToken],
+      );
+      const verifiedEmail = sessionResult.rows[0]?.email;
+      if (verifiedEmail) {
+        const profile = await fetchStudentProfile(verifiedEmail);
+        systemPrompt = systemPrompt + formatStudentProfileForPrompt(profile);
+      }
+    } catch (err) {
+      console.error("Student profile lookup error:", err.message);
+      // Non-fatal — proceed without the profile.
+    }
+  }
 
   if (history.length > 0) {
     const recap = history
